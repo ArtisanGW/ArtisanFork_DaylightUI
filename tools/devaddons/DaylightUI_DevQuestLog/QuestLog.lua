@@ -3,8 +3,13 @@
 -- to WTF/Account/<account>/SavedVariables/DaylightUI.lua on /reload or logout.
 -- /dui questlog clear removes it.
 
-local _, ns = ...
+-- A separate dev addon (tools/devaddons, never shipped). It reaches the
+-- Quests module's namespace through DaylightUI:GetModule, which is internal and
+-- not promised to plugins: fine for a local tool, kept out of the release.
 local DUI = DaylightUI
+local mod = DUI and DUI.GetModule and DUI:GetModule("Quests")
+local ns = mod and mod.ns
+if type(ns) ~= "table" then return end
 
 local Debug = { EVERY = 0.5, FOR = 60 }
 ns.Debug = Debug

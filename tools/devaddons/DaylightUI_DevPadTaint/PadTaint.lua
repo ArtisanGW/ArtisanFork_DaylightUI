@@ -11,8 +11,13 @@
 --   /dui padtaint now    a snapshot now
 --   /dui padtaint clear  empties the log
 
-local _, ns = ...
+-- A separate dev addon (tools/devaddons, never shipped). It reaches the
+-- Bags module's namespace through DaylightUI:GetModule, which is internal and
+-- not promised to plugins: fine for a local tool, kept out of the release.
 local DUI = DaylightUI
+local mod = DUI and DUI.GetModule and DUI:GetModule("Bags")
+local ns = mod and mod.ns
+if type(ns) ~= "table" then return end
 
 local Debug = { EVERY = 0.5, MAX_LINES = 3000, RECENT = 12, STACK = 25 }
 ns.Debug = Debug
