@@ -4,7 +4,7 @@
 -- macro button whose macro is /reload, and a key press is a hardware click, so
 -- the game reloads at once (it refuses ReloadUI() called from addon code).
 
-local KEY = "CTRL-ALT-SHIFT-F9"    -- tools/game_reload.sh presses the same keys
+local KEY = "ALT-CTRL-SHIFT-F9"    -- the game only reads modifiers in this order; game_reload.sh presses the same keys
 local BUTTON = "DaylightUIDevReloadButton"
 
 local Dev = {}
