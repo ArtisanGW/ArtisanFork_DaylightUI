@@ -7,9 +7,12 @@
 -- the last runs in DaylightUIDB.mapPace, which the game saves on /reload.
 --   /dui mappace          opens and closes the map itself (out of combat)
 --   /dui mappace manual   you press M: open/close it 3 times in the 20 seconds
+--   /dui mappace deep     as manual, and also times the game's own map steps
+--                         (each map data provider, overlay and the game's quest
+--                         list), to see where the game's part of the hitch goes
 --   /dui mappace clear    empties the saved runs
--- The automatic run closes the map from addon code: /reload after it before
--- playing, so nothing of the map is left tainted.
+-- The automatic run closes the map from addon code, and deep puts timers on the
+-- game's map: /reload after either before playing, so nothing is left tainted.
 
 local _, ns = ...
 local DUI = DaylightUI
@@ -49,11 +52,14 @@ local function mapShown()
     return type(m) == "table" and m:IsShown() == true
 end
 
--- Timing a Daylight function: t[key] is replaced by a timed copy until the run
--- ends. Errors pass through as they were; a nested call counts twice, fine here.
+-- Timing a function: t[key] is replaced by a timed copy until the run ends, then
+-- set back to what t itself held (nil for a method it got from its mixin).
+-- Errors pass through as they were; a nested call counts twice, fine here.
 local function wrap(t, key, label)
-    if type(t) ~= "table" or type(t[key]) ~= "function" then return end
-    local orig = t[key]
+    if type(t) ~= "table" then return end
+    local okGet, orig = pcall(function() return t[key] end)
+    if not okGet or type(orig) ~= "function" then return end
+    local raw = rawget(t, key)
     local function finish(t0, ok, ...)
         spent[label] = (spent[label] or 0) + (now() - t0)
         if not ok then error((...), 0) end
@@ -61,7 +67,68 @@ local function wrap(t, key, label)
     end
     local function timed(...) return finish(now(), pcall(orig, ...)) end
     t[key] = timed
-    undo[#undo + 1] = function() if t[key] == timed then t[key] = orig end end
+    undo[#undo + 1] = function() if rawget(t, key) == timed then t[key] = raw end end
+end
+
+-- The game's mixin a map piece was made from, by its methods: "QuestDataProvider".
+local mixinOf
+local function mixinName(o, key)
+    if not mixinOf then
+        mixinOf = {}
+        for name, v in pairs(_G) do
+            if type(name) == "string" and name:find("Mixin$") and type(v) == "table" then
+                pcall(function() for k, fn in pairs(v) do
+                    if type(fn) == "function" then
+                        local byKey = mixinOf[k] or {}
+                        mixinOf[k] = byKey
+                        -- the most specific mixin wins over a base one sharing the function
+                        local had = byKey[fn]
+                        if not had or (had:find("^MapCanvas") and not name:find("^MapCanvas")) then byKey[fn] = name end
+                    end
+                end end)
+            end
+        end
+    end
+    local fn = o[key]
+    local name = mixinOf[key] and mixinOf[key][fn]
+    if name then return (name:gsub("Mixin$", "")) end
+    local okName, n = pcall(function() return o.GetName and o:GetName() end)
+    return okName and type(n) == "string" and n or tostring(o):gsub("^table: ", "")
+end
+
+-- The game's own map steps, for /dui mappace deep.
+local function wrapGame()
+    local m = _G.WorldMapFrame
+    if type(m) ~= "table" then return end
+    for _, k in ipairs({ "OnShow", "OnHide", "OnMapChanged", "RefreshAll", "RefreshAllDataProviders", "RefreshOverlayFrames",
+                         "RefreshDetailLayers", "SynchronizeDisplayState", "UpdateMaximizedSize", "UpdateSpacerFrameAnchoring" }) do
+        wrap(m, k, "map." .. k)
+    end
+    local providers = {}
+    if type(m.dataProviders) == "table" then
+        for p in pairs(m.dataProviders) do providers[#providers + 1] = p end
+    end
+    for _, p in ipairs(providers) do
+        if type(p) == "table" then
+            for _, k in ipairs({ "RefreshAllData", "OnShow", "OnHide", "OnMapChanged", "RemoveAllData" }) do
+                if type(p[k]) == "function" then wrap(p, k, "provider." .. mixinName(p, "RefreshAllData") .. "." .. k) end
+            end
+        end
+    end
+    for _, o in ipairs(type(m.overlayFrames) == "table" and m.overlayFrames or {}) do
+        if type(o) == "table" and type(o.Refresh) == "function" then wrap(o, "Refresh", "overlay." .. mixinName(o, "Refresh") .. ".Refresh") end
+    end
+    for _, k in ipairs({ "QuestLogQuests_Update", "QuestMapFrame_UpdateAll", "QuestMapFrame_ShowQuestDetails",
+                         "QuestMapFrame_OnShow", "QuestMapFrame_OnHide", "QuestMapFrame_UpdateQuestSessionState" }) do
+        wrap(_G, k, "questlog." .. k)
+    end
+    local qm = _G.QuestMapFrame
+    if type(qm) == "table" then
+        for _, k in ipairs({ "OnShow", "OnHide", "SetDisplayMode", "ValidateTabs", "UpdateQuestSessionState", "RefreshTabs" }) do
+            wrap(qm, k, "questlog.QuestMapFrame." .. k)
+        end
+    end
+    report(string.format("timing %d map providers, %d overlays", #providers, type(m.overlayFrames) == "table" and #m.overlayFrames or 0))
 end
 
 local function skinsNs()
@@ -160,13 +227,17 @@ local function sample(dt)
     return s
 end
 
+-- The whole open or close call, the game's part included.
 local function act(i)
     if InCombatLockdown() then return end
+    local t0 = now()
     if i % 2 == 1 then
         if C_Map and C_Map.OpenWorldMap then pcall(C_Map.OpenWorldMap) end
+        spent["call.open"] = (spent["call.open"] or 0) + (now() - t0)
     elseif mapShown() then
         if type(HideUIPanel) == "function" then pcall(HideUIPanel, _G.WorldMapFrame)
         else pcall(_G.WorldMapFrame.Hide, _G.WorldMapFrame) end
+        spent["call.close"] = (spent["call.close"] or 0) + (now() - t0)
     end
 end
 
@@ -202,7 +273,7 @@ local function window(r, mark)
     return {
         what = mark.what, t = mark.t, frames = #list,
         worst = worst and worst.dt, worstAddons = worst and worst.addons, worstDui = worst and worst.dui,
-        addons = addons, dui = dui, kb = kb, top = topSpent(list, 5),
+        addons = addons, dui = dui, kb = kb, top = topSpent(list, r.mode == "deep" and 10 or 5),
     }
 end
 
@@ -252,7 +323,7 @@ local function finish()
     if d then
         table.insert(d.runs, 1, out)
         while #d.runs > Pace.RUNS do table.remove(d.runs) end
-        report(r.mode == "auto" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
+        report(r.mode ~= "manual" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
     end
 end
 
@@ -287,6 +358,7 @@ function Pace.Start(mode)
         return
     end
     wrapAll()
+    if mode == "deep" then wrapGame() end
     local t = now()
     run = { mode = mode, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
             kb = collectgarbage("count"), addons = addonNames() }
@@ -311,8 +383,8 @@ function Pace.Run(rest)
         local d = db()
         if d then d.runs = {} end
         report("saved runs cleared")
-    elseif rest == "manual" then
-        Pace.Start("manual")
+    elseif rest == "manual" or rest == "deep" then
+        Pace.Start(rest)
     else
         Pace.Start("auto")
     end
