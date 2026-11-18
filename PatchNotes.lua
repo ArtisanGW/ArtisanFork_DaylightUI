@@ -12,8 +12,18 @@ local _, DUI = ...
 
 DUI.PatchNotes = {
     { version = "Unreleased",
+        changed = {
+            { "General", "Outlined text is drawn the way the game draws its own text in the world, so outlines look crisper" },
+            { "Chat", "The second chat panel can be made narrower, down to 150 px" },
+        },
         fixed = {
-            { "General", "Using your font on the game's text changes the game's nameplates and speech bubbles more gently, and Russian, Korean and Chinese letters keep drawing" },
+            { "General", "\"Use this font for the game's text\" no longer changes the combat text over you or the names over people's heads, and the range dot on hotkeys stays a dot" },
+        },
+    },
+    { version = "1.9.4.4", date = "2026-11-18", summary = "A small fix for using your font on the game's text.",
+        fixed = {
+            { "General", "\"Use this font for the game's text\" now applies once as you log in and asks for a reload when switched" },
+            { "General", "With it on, Russian, Korean and Chinese letters in the game's text keep drawing" },
         },
     },
     { version = "1.9.4.3", date = "2026-11-18", summary = "Name and Cast bar tabs on every unit frame page, aura icons per row, chat tags in your language, and a round of fixes.",
