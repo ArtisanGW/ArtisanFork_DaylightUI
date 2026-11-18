@@ -151,6 +151,14 @@ function Motion.Appear(frame, rise)
     end
 end
 
+-- The end of a close. In a fight a window the game's navigation has served is
+-- put out of sight instead (Pad.PutAway says why).
+function Motion.HideNow(frame)
+    if DUI.Pad and DUI.Pad.PutAway(frame) then return end
+    frame:Hide()
+    frame:SetAlpha(1)
+end
+
 -- Closing: fade out over CLOSE, then Hide. A window counts as closed from the
 -- start of the fade (Motion.Shown), and showing it again mid-fade (via
 -- Motion.Window's hooks) cancels the fade at full alpha.
@@ -158,7 +166,7 @@ function Motion.Vanish(frame)
     if not frame:IsShown() or frame.__duiVanishing then return end
     if DUI.Sound then DUI.Sound.Play("close", frame.duiGameSounds and frame.duiGameSounds.close) end
     if DUI.Pad then DUI.Pad.Leaving(frame) end   -- before the Hide, see Pad.Leaving
-    if not Motion.On() then frame:Hide(); return end
+    if not Motion.On() then Motion.HideNow(frame); return end
     frame.__duiVanishing = true
     -- Escape is free again the moment the window starts to close.
     if frame.__duiEsc then frame.__duiEsc:Hide() end
@@ -171,8 +179,7 @@ function Motion.Vanish(frame)
         g:SetScript("OnFinished", function()
             if not frame.__duiVanishing then return end
             frame.__duiVanishing = nil
-            frame:Hide()
-            frame:SetAlpha(1)
+            Motion.HideNow(frame)
         end)
         g.__built = true
     end
@@ -181,10 +188,15 @@ end
 
 -- Shown and not on its way out. Toggles should ask this.
 function Motion.Shown(frame)
-    return frame:IsShown() and not frame.__duiVanishing
+    return frame:IsShown() and not frame.__duiVanishing and not (DUI.Pad and DUI.Pad.Away(frame))
 end
 
 local function cancel(frame)
+    if DUI.Pad and DUI.Pad.Away(frame) then
+        DUI.Pad.Back(frame)
+        if frame.__duiEsc then frame.__duiEsc:Show() end
+        return
+    end
     if not frame.__duiVanishing then return end
     frame.__duiVanishing = nil
     local g = frame.__duiMotion and frame.__duiMotion.vanish

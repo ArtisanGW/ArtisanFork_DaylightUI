@@ -204,11 +204,17 @@ end
 -- ---------------------------------------------------------------------
 
 -- Shown and not closing.
-function Feel.IsOpen(frame) return frame:IsShown() and not frame.__feelClosing end
+function Feel.IsOpen(frame)
+    return frame:IsShown() and not frame.__feelClosing and not (DUI.Pad and DUI.Pad.Away(frame))
+end
 
 -- Fade and rise in. A hidden window starts transparent and RISE px low; one
 -- caught mid-close reverses from where it is.
 function Feel.Open(frame)
+    if DUI.Pad and DUI.Pad.Away(frame) then
+        DUI.Pad.Back(frame)
+        frame:SetAlpha(0)
+    end
     if frame.__feelClosing and DUI.Pad then DUI.Pad.Returning(frame) end
     frame.__feelClosing = nil
     local from = frame:IsShown() and frame:GetAlpha() or 0
@@ -243,8 +249,7 @@ function Feel.Close(frame, done)
         local at = frame.__feelAt
         if at then at.dx = 0 end   -- reopen at home, not slid aside
         shift(frame, 0)
-        frame:Hide()
-        frame:SetAlpha(1)
+        if DUI.Motion then DUI.Motion.HideNow(frame) else frame:Hide(); frame:SetAlpha(1) end
         run(done)
     end
     local dy = Feel.Offset(frame)
