@@ -36,6 +36,7 @@ Gather.lua
 Voice.lua
 Choice.lua
 GiverTips.lua
+MapPace.lua
 Options.lua
 Debug.lua
 Module.lua
