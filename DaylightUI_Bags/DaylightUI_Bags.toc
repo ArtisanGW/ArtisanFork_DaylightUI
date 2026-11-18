@@ -36,5 +36,6 @@ Viewer.lua
 Currency.lua
 MoneyRoll.lua
 OpenClose.lua
+Debug.lua
 Options.lua
 Module.lua
