@@ -7,9 +7,13 @@
 -- the last runs in DaylightUIDB.mapPace, which the game saves on /reload.
 --   /dui mappace          opens and closes the map itself (out of combat)
 --   /dui mappace manual   you press M: open/close it 3 times in the 20 seconds
---   /dui mappace deep     as manual, and also times the game's own map steps
+--   /dui mappace deep     automatic, and also times the game's own map steps
 --                         (each map data provider, overlay and the game's quest
---                         list), to see where the game's part of the hitch goes
+--                         list), to see where the game's part of the hitch goes.
+--                         Runs twice: with the game's quest pins on, then, 15
+--                         seconds later, with them off (the questPOI setting,
+--                         put back after, or at the next login if a reload cut
+--                         the run short)
 --   /dui mappace clear    empties the saved runs
 -- The automatic run closes the map from addon code, and deep puts timers on the
 -- game's map: /reload after either before playing, so nothing is left tainted.
@@ -325,7 +329,7 @@ local function finish()
     for i, s in ipairs(r.frames) do dts[i] = s.dt end
     table.sort(dts)
     local out = {
-        when = date("%Y-%m-%d %H:%M:%S"), mode = r.mode, frames = #r.frames,
+        when = date("%Y-%m-%d %H:%M:%S"), mode = r.mode, label = r.label, frames = #r.frames,
         median = percentile(dts, 0.5), p95 = percentile(dts, 0.95), p99 = percentile(dts, 0.99),
         max = dts[#dts], over33 = 0, over50 = 0, profiler = profiler() ~= nil,
         steps = {}, hitches = {}, dt = {}, stacks = {},
@@ -368,8 +372,11 @@ local function finish()
     if d then
         table.insert(d.runs, 1, out)
         while #d.runs > Pace.RUNS do table.remove(d.runs) end
-        report(r.mode ~= "manual" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
+        if not r.after then
+            report(r.mode ~= "manual" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
+        end
     end
+    if r.after then r.after() end
 end
 
 frame:SetScript("OnUpdate", function()
@@ -380,7 +387,7 @@ frame:SetScript("OnUpdate", function()
     r.last = t
     r.frames[#r.frames + 1] = sample(dt)
     local at = (t - r.start) / 1000
-    if r.mode == "auto" then
+    if r.auto then
         local nextStep = Pace.STEPS[r.step + 1]
         if nextStep and at >= nextStep then
             r.step = r.step + 1
@@ -395,32 +402,89 @@ frame:SetScript("OnUpdate", function()
     if at >= Pace.LENGTH then finish() end
 end)
 
-function Pace.Start(mode)
+function Pace.Start(mode, label, after)
     if run then report("already running"); return end
-    if mode == "auto" and InCombatLockdown() then report("not in combat"); return end
-    if mode == "auto" and mapShown() then
+    local auto = mode ~= "manual"
+    if auto and InCombatLockdown() then report("not in combat"); return end
+    if auto and mapShown() then
         report("close the map first")
         return
     end
     wrapAll()
     if mode == "deep" then wrapGame() end
     local t = now()
-    run = { mode = mode, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
+    run = { mode = mode, auto = auto, label = label, after = after, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
             kb = collectgarbage("count"), addons = addonNames() }
     spent, calls, stacks = {}, {}, {}
     if DUI.Style and DUI.Style.TakeLayoutCount then DUI.Style.TakeLayoutCount() end
     frame:Show()
     if not profiler() then report("the game's addon profiler is off: frame times only") end
-    report(mode == "auto" and string.format("running %ds, the map opens and closes 3 times", Pace.LENGTH)
+    report(auto and string.format("running %ds%s, the map opens and closes 3 times", Pace.LENGTH, label and (" (" .. label .. ")") or "")
         or string.format("running %ds: open and close the map (M) 3 times", Pace.LENGTH))
 end
 
+-- Deep's second run: the game's quest pins off, put back afterwards.
+Pace.GAP = 15   -- seconds between the two runs
+local chain    -- the countdown between the runs, cancelled by combat
+
+local function poiBack()
+    local d = db()
+    if d and d.poiWas ~= nil then
+        if InCombatLockdown() then
+            DUI.AfterCombat(poiBack, "mappace:poi")
+            return
+        end
+        if type(SetCVar) == "function" then pcall(SetCVar, "questPOI", d.poiWas) end
+        report("the game's quest pins are back (questPOI " .. tostring(d.poiWas) .. ")")
+        d.poiWas = nil
+    end
+end
+
+local function stopChain()
+    if chain then chain:Cancel(); chain = nil end
+end
+
+local function secondRun()
+    chain = nil
+    if InCombatLockdown() then report("combat: second run skipped"); return end
+    local d = db()
+    local was = type(GetCVar) == "function" and GetCVar("questPOI") or nil
+    if d and was ~= nil then d.poiWas = was end
+    if type(SetCVar) == "function" then pcall(SetCVar, "questPOI", "0") end
+    Pace.Start("deep", "quest pins off", function()
+        poiBack()
+        report("both runs saved, /reload to write them (and to clear the map's taint)")
+    end)
+end
+
+function Pace.Deep()
+    if run or chain then report("already running"); return end
+    Pace.Start("deep", "quest pins on", function()
+        if InCombatLockdown() then report("combat: second run skipped"); return end
+        report(string.format("first run done. Second run, with the game's quest pins off, in %d seconds: "
+            .. "I turn them off myself, nothing to do (leave the map closed)", Pace.GAP))
+        local left = Pace.GAP
+        chain = C_Timer.NewTicker(5, function()
+            left = left - 5
+            if left > 0 then report(left .. "...") else stopChain(); secondRun() end
+        end, Pace.GAP / 5)
+    end)
+end
+
 DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
-    if run and run.mode == "auto" then
+    if chain then
+        stopChain()
+        report("combat: second run cancelled")
+    end
+    if run and run.auto then
+        run.after = function() poiBack() end
         report("combat: stopped")
         finish()
     end
 end)
+
+-- A reload during the second run left the pins off.
+DUI.RegisterEvent("PLAYER_LOGIN", function() C_Timer.After(1, poiBack) end)
 
 function Pace.Run(rest)
     rest = rest or ""
@@ -428,8 +492,10 @@ function Pace.Run(rest)
         local d = db()
         if d then d.runs = {} end
         report("saved runs cleared")
-    elseif rest == "manual" or rest == "deep" then
-        Pace.Start(rest)
+    elseif rest == "manual" then
+        Pace.Start("manual")
+    elseif rest == "deep" then
+        Pace.Deep()
     else
         Pace.Start("auto")
     end
