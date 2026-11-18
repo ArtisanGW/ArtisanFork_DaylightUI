@@ -16,7 +16,9 @@
 --                         short)
 --   /dui mappace clear    empties the saved runs
 -- The automatic run closes the map from addon code, and deep puts timers on the
--- game's map: /reload after either before playing, so nothing is left tainted.
+-- game's map: every run ends with a reload (Pace.RELOAD seconds after), which
+-- writes the results and clears the taint. Out of combat only: in a fight it
+-- waits for the fight to end.
 
 local _, ns = ...
 local DUI = DaylightUI
@@ -29,6 +31,7 @@ local Pace = {
     HITCH = 25,           -- ms: frames longer than this are kept in full
     RUNS = 5,             -- runs kept in the saved variables
     MAX_HITCHES = 60,     -- frames kept in full per run
+    RELOAD = 3,           -- seconds from the end of the runs to the reload
 }
 ns.MapPace = Pace
 
@@ -42,6 +45,24 @@ local stacks = {}      -- "what" -> { [stack] = times }, for the functions asked
 local undo = {}        -- functions to put back when the run ends
 
 local function report(text) print("Daylight UI mappace: " .. text) end
+
+-- The end of the runs: reload so the game writes the results to disk.
+local function reloadSoon()
+    report(string.format("saved, reloading in %d seconds to write the results", Pace.RELOAD))
+    C_Timer.After(Pace.RELOAD, function()
+        local function go()
+            if type(ReloadUI) == "function" then ReloadUI() end
+            -- still here a moment later: the game refused it
+            C_Timer.After(2, function() report("the reload didn't happen, /reload to write the results") end)
+        end
+        if InCombatLockdown() then
+            report("in combat: reloading when the fight ends")
+            DUI.AfterCombat(go, "mappace:reload")
+        else
+            go()
+        end
+    end)
+end
 
 local function db()
     local root = _G.DaylightUIDB
@@ -373,7 +394,7 @@ local function finish()
         table.insert(d.runs, 1, out)
         while #d.runs > Pace.RUNS do table.remove(d.runs) end
         if not r.after then
-            report(r.mode ~= "manual" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
+            reloadSoon()
         end
     end
     if r.after then r.after() end
@@ -446,7 +467,7 @@ local function secondRun()
     if type(SetCVar) == "function" then pcall(SetCVar, "questPOI", "0") end
     local started = Pace.Start("deep", "quest pins off", function()
         poiBack()
-        report("both runs saved, /reload to write them (and to clear the map's taint)")
+        reloadSoon()
     end)
     if not started then poiBack() end
 end
@@ -462,7 +483,7 @@ end
 
 DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
     if run and run.auto then
-        run.after = function() poiBack() end
+        run.after = function() poiBack(); reloadSoon() end
         report("combat: stopped")
         finish()
     end
