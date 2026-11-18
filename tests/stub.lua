@@ -3386,7 +3386,7 @@ stub.BUFFS_FILES = { "Core.lua", "Categories.lua", "Data.lua", "Classify.lua", "
                      "Scan.lua", "Preview.lua", "Widgets.lua", "Bar.lua", "Feel.lua", "DebuffBar.lua", "Private.lua", "PreviewBar.lua", "Reminder.lua", "EdgeEditor.lua", "Commands.lua",
                      "Options.lua", "Module.lua" }
 stub.QUESTS_FILES = { "Blizzard.lua", "Defaults.lua", "Data.lua", "Layout.lua", "Look.lua", "Rows.lua", "Animate.lua",
-                      "Items.lua", "Clicks.lua", "Details.lua", "Journal.lua", "Scroll.lua", "Tracker.lua", "Progress.lua", "Nav.lua", "Spots.lua", "Route.lua", "Arrow.lua", "QuestieBridge.lua", "Gather.lua", "Voice.lua", "Choice.lua", "GiverTips.lua", "MapPace.lua", "Options.lua", "Debug.lua", "Module.lua" }
+                      "Items.lua", "Clicks.lua", "Details.lua", "Journal.lua", "Scroll.lua", "Tracker.lua", "Progress.lua", "Nav.lua", "Spots.lua", "Route.lua", "Arrow.lua", "QuestieBridge.lua", "Gather.lua", "Voice.lua", "Choice.lua", "GiverTips.lua", "Options.lua", "Module.lua" }
 stub.CHARACTER_FILES = { "Defaults.lua", "Colors.lua", "Gear.lua", "Stats.lua", "StatText.lua", "Window.lua", "Follow.lua", "Slots.lua",
                          "Model.lua", "Pages/Character.lua", "Pages/Pet.lua", "Menus.lua", "Sets.lua", "List.lua", "Pages/Reputation.lua",
                          "Pages/Skills.lua", "Pages/PvP.lua", "Pages/Statistics.lua", "Pages/Currency.lua",
@@ -3497,7 +3497,7 @@ function stub.Load(opts)
         local BG = {}
         loadFiles("DaylightUI_Bags/", { "Defaults.lua", "Saved.lua", "Items.lua", "Plugins.lua", "Search.lua", "Categories.lua", "Junk.lua", "Repair.lua", "Bags.lua", "Layout.lua", "Stack.lua", "Keep.lua", "Swap.lua", "Window.lua", "Move.lua", "Disenchant.lua", "Guard.lua", "Prep.lua", "Slots.lua", "Bank.lua", "Viewer.lua",
                                         "Currency.lua", "MoneyRoll.lua",
-                                        "OpenClose.lua", "Debug.lua", "Options.lua", "Module.lua" }, "DaylightUI_Bags", BG)
+                                        "OpenClose.lua", "Options.lua", "Module.lua" }, "DaylightUI_Bags", BG)
         stub.FireEvent("ADDON_LOADED", "DaylightUI_Bags")
         stub.bags = BG
     end

@@ -1,0 +1,19 @@
+## Interface: 16001
+## Title: Daylight UI Dev: PadTaint
+## Notes: Local development tool, never shipped. /dui padtaint: controller state written by addons, and every refused action with its call stack, into DaylightUIDB.padTaint.
+## Author: Artisan
+## Version: 1.0
+## Dependencies: DaylightUI, DaylightUI_Bags
+## Category: Development Tools
+## Category-deDE: Entwicklungstools
+## Category-esES: Herramientas de Desarrollo
+## Category-esMX: Herramientas de Desarrollo
+## Category-frFR: Outils de Développement
+## Category-itIT: Strumenti di sviluppo
+## Category-koKR: Development Tools
+## Category-ptBR: Ferramentas de Desenvolvimento
+## Category-ruRU: Инструменты разработки
+## Category-zhCN: 开发工具
+## Category-zhTW: 開發工具
+
+PadTaint.lua

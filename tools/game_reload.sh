@@ -38,6 +38,20 @@ for f in "$SRC"/*; do
     if ! cmp -s "$f" "$DEST/$base"; then cp "$f" "$DEST/$base"; fresh=1; echo "installed $NAME/$base"; fi
 done
 
+# The dev tools (tools/devaddons, never shipped: /dui questlog, mappace, padtaint),
+# each its own addon. A new or changed one loads on this reload, so it doesn't
+# need the by-hand /reload the reload helper itself does.
+DEVADDONS="$(cd "$(dirname "$0")" && pwd)/devaddons"
+for dir in "$DEVADDONS"/*/; do
+    [ -d "$dir" ] || continue
+    addon="$(basename "$dir")"
+    mkdir -p "$ADDONS/$addon"
+    for f in "$dir"*; do
+        base="$(basename "$f")"
+        if ! cmp -s "$f" "$ADDONS/$addon/$base"; then cp "$f" "$ADDONS/$addon/$base"; echo "installed $addon/$base"; fi
+    done
+done
+
 win="$(xdotool search --name '^World of Warcraft$' 2>/dev/null | head -n 1)"
 [ -z "$win" ] && win="$(xdotool search --class 'wow' 2>/dev/null | head -n 1)"
 if [ -z "$win" ]; then
