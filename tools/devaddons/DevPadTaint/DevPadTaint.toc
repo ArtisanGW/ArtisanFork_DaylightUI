@@ -1,9 +1,9 @@
 ## Interface: 16001
-## Title: Daylight UI Dev: QuestLog
-## Notes: Local development tool, never shipped. /dui questlog: records the quest tracker's fade state for 60 s into DaylightUIDB.questLog.
+## Title: Dev PadTaint
+## Notes: Local development tool, never shipped, needs no other addon. /padtaint: the game's controller state written by addons, and every refused action with its call stack, into DevPadTaintDB.
 ## Author: Artisan
 ## Version: 1.0
-## Dependencies: DaylightUI, DaylightUI_Quests
+## SavedVariables: DevPadTaintDB
 ## Category: Development Tools
 ## Category-deDE: Entwicklungstools
 ## Category-esES: Herramientas de Desarrollo
@@ -16,4 +16,4 @@
 ## Category-zhCN: 开发工具
 ## Category-zhTW: 開發工具
 
-QuestLog.lua
+PadTaint.lua

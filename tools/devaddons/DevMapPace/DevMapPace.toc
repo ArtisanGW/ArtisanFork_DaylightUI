@@ -1,9 +1,9 @@
 ## Interface: 16001
-## Title: Daylight UI Dev: PadTaint
-## Notes: Local development tool, never shipped. /dui padtaint: controller state written by addons, and every refused action with its call stack, into DaylightUIDB.padTaint.
+## Title: Dev MapPace
+## Notes: Local development tool, never shipped, needs no other addon. /mappace: frame times while the world map opens and closes, with the game's addon profiler per addon, into DevMapPaceDB.
 ## Author: Artisan
 ## Version: 1.0
-## Dependencies: DaylightUI, DaylightUI_Bags
+## SavedVariables: DevMapPaceDB
 ## Category: Development Tools
 ## Category-deDE: Entwicklungstools
 ## Category-esES: Herramientas de Desarrollo
@@ -16,4 +16,4 @@
 ## Category-zhCN: 开发工具
 ## Category-zhTW: 開發工具
 
-PadTaint.lua
+MapPace.lua

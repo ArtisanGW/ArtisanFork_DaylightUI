@@ -1,4 +1,4 @@
--- Debug only, not for release. /dui padtaint watches the game's controller state
+-- Debug only, not for release. /padtaint watches the game's controller state
 -- (GamepadMode, its FrameControlsManager and shownFrames, the InputBindingManager
 -- and its bindingSetStack, SmartNavigation) for fields last written by an addon.
 -- Each newly tainted field is logged with who wrote it and the events just before
@@ -6,21 +6,37 @@
 -- snapshot. The game's "Interface action failed" chat message (no Lua error)
 -- is logged with the stack that printed it, and so is each show or hide of the
 -- game's navigation frame that an addon's code is on the stack of. Kept on across reloads until turned off. Written to
--- DaylightUIDB.padTaint, which the game saves on /reload or logout.
---   /dui padtaint        on / off
---   /dui padtaint now    a snapshot now
---   /dui padtaint clear  empties the log
+-- DevPadTaintDB.padTaint, which the game saves on /reload or logout.
+--   /padtaint        on / off
+--   /padtaint now    a snapshot now
+--   /padtaint clear  empties the log
 
--- A separate dev addon (tools/devaddons, never shipped). It reaches the
--- Bags module's namespace through DaylightUI:GetModule, which is internal and
--- not promised to plugins: fine for a local tool, kept out of the release.
-local DUI = DaylightUI
-local mod = DUI and DUI.GetModule and DUI:GetModule("Bags")
-local ns = mod and mod.ns
-if type(ns) ~= "table" then return end
+-- A vanilla addon: it uses only the game, never another addon. Its own events,
+-- slash command (/padtaint) and saved variables (DevPadTaintDB).
+local events, handlers = CreateFrame("Frame"), {}
+events:SetScript("OnEvent", function(_, event, ...)
+    for _, fn in ipairs(handlers[event]) do fn(event, ...) end
+end)
+local function on(event, fn)
+    if not handlers[event] then handlers[event] = {}; events:RegisterEvent(event) end
+    table.insert(handlers[event], fn)
+end
+-- Runs fn now, or once the fight is over.
+local function afterCombat(fn)
+    if not InCombatLockdown() then return fn() end
+    local done = false
+    on("PLAYER_REGEN_ENABLED", function() if not done then done = true; fn() end end)
+end
+local function store()
+    _G.DevPadTaintDB = type(_G.DevPadTaintDB) == "table" and _G.DevPadTaintDB or {}
+    return _G.DevPadTaintDB
+end
+local function command(fn)
+    _G["SLASH_DEVPADTAINT1"] = "/padtaint"
+    SlashCmdList["DEVPADTAINT"] = function(msg) fn(msg or "") end
+end
 
 local Debug = { EVERY = 0.5, MAX_LINES = 3000, RECENT = 12, STACK = 25 }
-ns.Debug = Debug
 
 local ticker
 local recent = {}       -- the last few events, oldest first
@@ -29,8 +45,7 @@ local printed = 0       -- notes already written out (each one only once)
 local noted = 0
 
 local function db()
-    local root = _G.DaylightUIDB
-    if type(root) ~= "table" then return nil end
+    local root = store()
     root.padTaint = root.padTaint or { log = {} }
     root.padTaint.log = root.padTaint.log or {}
     return root.padTaint
@@ -232,66 +247,11 @@ local function hookOnce()
     end
 end
 
-local function bagState()
-    local w = ns.window
-    if not w then return "no bag" end
-    local away = DUI.Pad and DUI.Pad.Away and DUI.Pad.Away(w)
-    local kids, shownKids = 0, 0
-    for _, c in ipairs({ w:GetChildren() }) do
-        kids = kids + 1
-        if c:IsShown() then shownKids = shownKids + 1 end
-    end
-    return string.format("bag shown=%s alpha=%.2f away=%s parts %d/%d mouse=%s", tostring(w:IsShown()),
-        w:GetAlpha(), tostring(away), shownKids, kids, tostring(w:IsMouseEnabled()))
-end
-
-local wrapped = false
-local function wrapPad()
-    local P = DUI.Pad
-    if wrapped or not (P and P.PutAway and P.Back) then return end
-    wrapped = true
-    local put, back = P.PutAway, P.Back
-    P.PutAway = function(frame)
-        local r = put(frame)
-        if ticker and frame == ns.window then
-            write("PutAway -> " .. tostring(r) .. "  lockdown=" .. tostring(InCombatLockdown()) .. "  " .. bagState())
-            writeStack(stackText())
-        end
-        return r
-    end
-    P.Back = function(frame)
-        local was = P.Away(frame)
-        back(frame)
-        if ticker and frame == ns.window and was then
-            write("Back  lockdown=" .. tostring(InCombatLockdown()) .. "  " .. bagState())
-            writeStack(stackText())
-        end
-    end
-end
-
-local lastBag
-local function watchBag()
-    if not InCombatLockdown() then lastBag = nil; return end
-    local s = bagState()
-    if s ~= lastBag then write("in fight: " .. s); lastBag = s end
-end
-
-local function watchWindow()
-    local w = ns.window
-    if not w or w.padTaintHooked then return end
-    w.padTaintHooked = true
-    w:HookScript("OnShow", function() note("bag OnShow") end)
-    w:HookScript("OnHide", function() note("bag OnHide") end)
-end
-
 function Debug.Start()
     hookOnce()
     seen = scan()
     if ticker then ticker:Cancel() end
-    wrapPad()
     ticker = C_Timer.NewTicker(Debug.EVERY, function()
-        watchWindow()
-        watchBag()
         Debug.Tick()
     end)
     Debug.Snapshot("start")
@@ -305,21 +265,21 @@ local EVENTS = { "MERCHANT_SHOW", "MERCHANT_CLOSED", "PLAYER_INTERACTION_MANAGER
     "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
     "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "GOSSIP_SHOW", "GOSSIP_CLOSED" }
 for _, e in ipairs(EVENTS) do
-    DUI.RegisterEvent(e, function(event, a) if ticker then note(event .. (a ~= nil and (" " .. tostring(a)) or "")) end end)
+    on(e, function(event, a) if ticker then note(event .. (a ~= nil and (" " .. tostring(a)) or "")) end end)
 end
-DUI.RegisterEvent("PLAYER_IN_COMBAT_CHANGED", function(_, on)
+on("PLAYER_IN_COMBAT_CHANGED", function(_, on)
     if not ticker then return end
     note("PLAYER_IN_COMBAT_CHANGED " .. tostring(on))
-    Debug.Snapshot("PLAYER_IN_COMBAT_CHANGED " .. tostring(on) .. "  " .. bagState())
+    Debug.Snapshot("PLAYER_IN_COMBAT_CHANGED " .. tostring(on))
 end)
 for _, e in ipairs({ "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED" }) do
-    DUI.RegisterEvent(e, function(event, addon, fn)
+    on(e, function(event, addon, fn)
         if not ticker then return end
         note(event .. " " .. tostring(addon) .. " " .. tostring(fn))
         Debug.Snapshot(event .. " " .. tostring(addon) .. " " .. tostring(fn))
     end)
 end
-DUI.RegisterEvent("PLAYER_LOGIN", function()
+on("PLAYER_LOGIN", function()
     local d = db()
     if d and d.on then Debug.Start() end
 end)
@@ -329,19 +289,19 @@ function Debug.Run(rest)
     if not d then return end
     if rest == "clear" then
         d.log = {}
-        print("Daylight UI padtaint: log cleared")
+        print("padtaint: log cleared")
     elseif rest == "now" then
         Debug.Snapshot("by hand")
-        print("Daylight UI padtaint: snapshot taken, /reload to save")
+        print("padtaint: snapshot taken, /reload to save")
     elseif d.on then
         d.on = nil
         Debug.Stop()
-        print("Daylight UI padtaint: off")
+        print("padtaint: off")
     else
         d.on = true
         Debug.Start()
-        print("Daylight UI padtaint: on, stays on across reloads (/dui padtaint to stop)")
+        print("padtaint: on, stays on across reloads (/padtaint to stop)")
     end
 end
 
-DUI.RegisterCommand("padtaint", Debug.Run)
+command(Debug.Run)

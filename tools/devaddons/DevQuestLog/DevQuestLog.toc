@@ -1,9 +1,9 @@
 ## Interface: 16001
-## Title: Daylight UI Dev: MapPace
-## Notes: Local development tool, never shipped. /dui mappace: frame times while the world map opens and closes, per addon, into DaylightUIDB.mapPace.
+## Title: Dev QuestLog
+## Notes: Local development tool, never shipped, needs no other addon. /questlog: records the game's quest tracker (shown, alpha) and combat lockdown twice a second for 60 s, into DevQuestLogDB.
 ## Author: Artisan
 ## Version: 1.0
-## Dependencies: DaylightUI, DaylightUI_Quests
+## SavedVariables: DevQuestLogDB
 ## Category: Development Tools
 ## Category-deDE: Entwicklungstools
 ## Category-esES: Herramientas de Desarrollo
@@ -16,4 +16,4 @@
 ## Category-zhCN: 开发工具
 ## Category-zhTW: 開發工具
 
-MapPace.lua
+QuestLog.lua
