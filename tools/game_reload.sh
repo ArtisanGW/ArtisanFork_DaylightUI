@@ -18,7 +18,7 @@
 set -u
 GAME="${DAYLIGHT_GAME:-/var/mnt/data/Jeux - Installations/World of Warcraft/_forever_}"
 ADDONS="$GAME/Interface/AddOns"
-NAME="DaylightUI_DevReload"
+NAME="DevReload"
 SRC="$(cd "$(dirname "$0")" && pwd)/devreload/$NAME"
 DEST="$ADDONS/$NAME"
 KEYS="ctrl+alt+shift+F9"    # DevReload.lua's KEY (not F12: Steam takes it for screenshots)
