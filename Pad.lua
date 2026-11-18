@@ -1220,17 +1220,6 @@ local function combatActive()
     return type(R) == "table" and T and R.IsAddOnRestrictionActive(T.Combat) == true
 end
 
--- A window closing as a fight starts (the bag on a controller): tells the game
--- first, even with the fight already handed back, while it still listens.
-function Pad.LeavingForFight(frame)
-    if not followed[frame] or not told[frame] then return end
-    local m = manager()
-    if not m or InCombatLockdown() or combatActive() then return end
-    told[frame] = nil
-    Pad.aimed[frame] = nil
-    m:FrameHidden(frame)
-end
-
 local relist = {} -- the game's own windows handed back for the fight, still shown
 
 -- Closing a window the game's navigation has served, in a fight: its OnHide hook
