@@ -124,7 +124,13 @@ function T.count(t)
 end
 
 local tests = {}
-function T.test(name, fn) tests[#tests + 1] = { name = name, fn = fn } end
+-- DUI_TEST="part of a name" runs only the tests whose name contains it (while
+-- working on one; the whole file and --par before a PR).
+local ONLY_TEST = os.getenv("DUI_TEST")
+function T.test(name, fn)
+    if ONLY_TEST and not string.find(name, ONLY_TEST, 1, true) then return end
+    tests[#tests + 1] = { name = name, fn = fn }
+end
 
 -- The dev tools (DaylightUI_Dev) and local notes aren't in the public repo.
 -- Tests that need the dev tools register with T.devtest and are left out without them.
