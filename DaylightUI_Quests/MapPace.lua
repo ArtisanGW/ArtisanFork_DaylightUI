@@ -33,6 +33,8 @@ frame:Hide()
 Pace.frame = frame
 local run              -- the run in progress
 local spent = {}       -- "what" -> ms this frame, from the timed functions
+local calls = {}       -- "what" -> times called this frame
+local stacks = {}      -- "what" -> { [stack] = times }, for the functions asked to (deep)
 local undo = {}        -- functions to put back when the run ends
 
 local function report(text) print("Daylight UI mappace: " .. text) end
@@ -55,7 +57,7 @@ end
 -- Timing a function: t[key] is replaced by a timed copy until the run ends, then
 -- set back to what t itself held (nil for a method it got from its mixin).
 -- Errors pass through as they were; a nested call counts twice, fine here.
-local function wrap(t, key, label)
+local function wrap(t, key, label, keepStack)
     if type(t) ~= "table" then return end
     local okGet, orig = pcall(function() return t[key] end)
     if not okGet or type(orig) ~= "function" then return end
@@ -65,7 +67,16 @@ local function wrap(t, key, label)
         if not ok then error((...), 0) end
         return ...
     end
-    local function timed(...) return finish(now(), pcall(orig, ...)) end
+    local function timed(...)
+        calls[label] = (calls[label] or 0) + 1
+        if keepStack and debugstack then
+            local st = stacks[label] or {}
+            stacks[label] = st
+            local trace = debugstack(2, 14, 0) or "?"
+            st[trace] = (st[trace] or 0) + 1
+        end
+        return finish(now(), pcall(orig, ...))
+    end
     t[key] = timed
     undo[#undo + 1] = function() if rawget(t, key) == timed then t[key] = raw end end
 end
@@ -110,17 +121,21 @@ local function wrapGame()
     end
     for _, p in ipairs(providers) do
         if type(p) == "table" then
+            local name = mixinName(p, "RefreshAllData")   -- before its methods are timed
             for _, k in ipairs({ "RefreshAllData", "OnShow", "OnHide", "OnMapChanged", "RemoveAllData" }) do
-                if type(p[k]) == "function" then wrap(p, k, "provider." .. mixinName(p, "RefreshAllData") .. "." .. k) end
+                if type(p[k]) == "function" then wrap(p, k, "provider." .. name .. "." .. k) end
             end
         end
     end
+    -- who rebuilds the game's quest list, and how often
+    wrap(m, "RemoveAllPinsByTemplate", "map.RemoveAllPinsByTemplate")
+    wrap(m, "AcquirePin", "map.AcquirePin")
     for _, o in ipairs(type(m.overlayFrames) == "table" and m.overlayFrames or {}) do
         if type(o) == "table" and type(o.Refresh) == "function" then wrap(o, "Refresh", "overlay." .. mixinName(o, "Refresh") .. ".Refresh") end
     end
     for _, k in ipairs({ "QuestLogQuests_Update", "QuestMapFrame_UpdateAll", "QuestMapFrame_ShowQuestDetails",
                          "QuestMapFrame_OnShow", "QuestMapFrame_OnHide", "QuestMapFrame_UpdateQuestSessionState" }) do
-        wrap(_G, k, "questlog." .. k)
+        wrap(_G, k, "questlog." .. k, k == "QuestLogQuests_Update")
     end
     local qm = _G.QuestMapFrame
     if type(qm) == "table" then
@@ -224,6 +239,10 @@ local function sample(dt)
         s.spent = spent
         spent = {}
     end
+    if next(calls) then
+        s.calls = calls
+        calls = {}
+    end
     return s
 end
 
@@ -256,6 +275,20 @@ local function topSpent(list, n)
     return table.concat(parts, ", ")
 end
 
+-- Deep: how often the game's quest list and pins were rebuilt.
+local function topCalls(list)
+    local sum = {}
+    for _, s in ipairs(list) do
+        for what, n in pairs(s.calls or {}) do sum[what] = (sum[what] or 0) + n end
+    end
+    local parts = {}
+    for _, k in ipairs({ "questlog.QuestLogQuests_Update", "map.RemoveAllPinsByTemplate", "map.AcquirePin",
+                         "provider.QuestDataProvider.RefreshAllData", "map.RefreshAllDataProviders" }) do
+        if sum[k] then parts[#parts + 1] = string.format("%s x%d", k:gsub("^%w+%.", ""), sum[k]) end
+    end
+    return table.concat(parts, ", ")
+end
+
 -- A summary of the frames from an open or close up to Pace.AFTER seconds later.
 local function window(r, mark)
     local list = {}
@@ -274,6 +307,7 @@ local function window(r, mark)
         what = mark.what, t = mark.t, frames = #list,
         worst = worst and worst.dt, worstAddons = worst and worst.addons, worstDui = worst and worst.dui,
         addons = addons, dui = dui, kb = kb, top = topSpent(list, r.mode == "deep" and 10 or 5),
+        calls = r.mode == "deep" and topCalls(list) or nil,
     }
 end
 
@@ -294,7 +328,7 @@ local function finish()
         when = date("%Y-%m-%d %H:%M:%S"), mode = r.mode, frames = #r.frames,
         median = percentile(dts, 0.5), p95 = percentile(dts, 0.95), p99 = percentile(dts, 0.99),
         max = dts[#dts], over33 = 0, over50 = 0, profiler = profiler() ~= nil,
-        steps = {}, hitches = {}, dt = {},
+        steps = {}, hitches = {}, dt = {}, stacks = {},
     }
     for _, d in ipairs(dts) do
         if d > 33.4 then out.over33 = out.over33 + 1 end
@@ -306,6 +340,7 @@ local function finish()
     for _, mark in ipairs(r.marks) do
         local w = window(r, mark)
         out.steps[#out.steps + 1] = w
+        if w.calls and w.calls ~= "" then report(w.what .. " calls: " .. w.calls) end
         report(string.format("%s at %.1fs: worst frame %sms (addons %s, DUI %s), next %ds: addons %sms, DUI %sms, %d KB made%s",
             w.what, w.t, fmt(w.worst), fmt(w.worstAddons), fmt(w.worstDui), Pace.AFTER, fmt(w.addons), fmt(w.dui),
             math.floor(w.kb), w.top ~= "" and (" | " .. w.top) or ""))
@@ -319,6 +354,16 @@ local function finish()
     local parts = {}
     for i, s in ipairs(r.frames) do parts[i] = string.format("%.1f", s.dt) end
     out.dt = table.concat(parts, ",")
+    -- the callers, most frequent first
+    for label, st in pairs(stacks) do
+        local list = {}
+        for trace, n in pairs(st) do list[#list + 1] = { n = n, trace = trace } end
+        table.sort(list, function(a, b) return a.n > b.n end)
+        local keep = {}
+        for i = 1, math.min(6, #list) do keep[i] = list[i] end
+        out.stacks[label] = keep
+    end
+    stacks = {}
     local d = db()
     if d then
         table.insert(d.runs, 1, out)
@@ -362,7 +407,7 @@ function Pace.Start(mode)
     local t = now()
     run = { mode = mode, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
             kb = collectgarbage("count"), addons = addonNames() }
-    spent = {}
+    spent, calls, stacks = {}, {}, {}
     if DUI.Style and DUI.Style.TakeLayoutCount then DUI.Style.TakeLayoutCount() end
     frame:Show()
     if not profiler() then report("the game's addon profiler is off: frame times only") end
