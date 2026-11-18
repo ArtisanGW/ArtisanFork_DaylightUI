@@ -8,8 +8,12 @@
 #   tools/game_reload.sh            install if needed, then ask the game
 #   DAYLIGHT_GAME=/path/_forever_   another game folder
 #
-# Exit codes: 0 asked, 2 the game isn't running or its window can't be found,
-# 3 the addon was just installed or updated (one /reload by hand loads it).
+# After pressing the key it waits for the reload to show: the game writes its
+# saved variables (WTF/Account/**/SavedVariables) on every reload.
+#
+# Exit codes: 0 the game reloaded, 2 the game isn't running or its window can't
+# be found, 3 the addon was just installed or updated (one /reload by hand loads
+# it), 4 the key was pressed but no reload showed within RELOAD_WAIT seconds.
 
 set -u
 GAME="${DAYLIGHT_GAME:-/var/mnt/data/Jeux - Installations/World of Warcraft/_forever_}"
@@ -18,6 +22,7 @@ NAME="DaylightUI_DevReload"
 SRC="$(cd "$(dirname "$0")" && pwd)/devreload/$NAME"
 DEST="$ADDONS/$NAME"
 KEYS="ctrl+alt+shift+F9"    # DevReload.lua's KEY (not F12: Steam takes it for screenshots)
+RELOAD_WAIT="${RELOAD_WAIT:-30}"   # seconds to wait for the reload to show
 
 if [ ! -d "$ADDONS" ]; then
     echo "No AddOns folder at: $ADDONS" >&2
@@ -45,19 +50,40 @@ if [ "$fresh" = 1 ]; then
     exit 3
 fi
 
+# Saved variables written after this mark mean the game reloaded.
+MARK="$(mktemp)"
+trap 'rm -f "$MARK"' EXIT
+confirm() {
+    local tries=$((RELOAD_WAIT * 2)) hit
+    while [ "$tries" -gt 0 ]; do
+        hit="$(find "$GAME/WTF/Account" -path '*SavedVariables*' -name '*.lua' -newer "$MARK" -print -quit 2>/dev/null)"
+        if [ -n "$hit" ]; then
+            echo "$1 The game reloaded (saved variables written at $(date +%H:%M:%S))."
+            exit 0
+        fi
+        sleep 0.5
+        tries=$((tries - 1))
+    done
+    echo "$1 But no reload showed within ${RELOAD_WAIT}s: the key may not have reached the game (in combat, or another window took it). Reload by hand." >&2
+    exit 4
+}
+
 # Bring the game forward and press the keys. Wine ignores keys sent to a window
-# that isn't focused, hence the activate first.
-if xdotool windowactivate --sync "$win" 2>/dev/null && sleep 0.3 && xdotool key --clearmodifiers "$KEYS"; then
-    echo "Pressed the reload key in the game."
-    exit 0
+# that isn't focused, hence the activate first. A text box with the cursor (chat,
+# the Send Mail fields) takes every key, so key bindings don't fire: Escape first
+# takes the cursor out. With no cursor anywhere, Escape closes a window or opens
+# the game menu, which the reload right after makes moot.
+if xdotool windowactivate --sync "$win" 2>/dev/null && sleep 0.3 \
+    && xdotool key --clearmodifiers Escape && sleep 0.2 && xdotool key --clearmodifiers "$KEYS"; then
+    confirm "Pressed the reload key in the game."
 fi
 
 # Fallback: ydotool types into whatever has focus (needs ydotoold running).
 if command -v ydotool >/dev/null 2>&1; then
-    # ctrl 29, alt 56, shift 42, F9 67
-    if ydotool key 29:1 56:1 42:1 67:1 67:0 42:0 56:0 29:0 >/dev/null 2>&1; then
-        echo "Pressed the reload key through ydotool (if WoW had focus)."
-        exit 0
+    # Escape 1 (out of any text box, as above), then ctrl 29, alt 56, shift 42, F9 67
+    if ydotool key 1:1 1:0 >/dev/null 2>&1 && sleep 0.2 \
+        && ydotool key 29:1 56:1 42:1 67:1 67:0 42:0 56:0 29:0 >/dev/null 2>&1; then
+        confirm "Pressed the reload key through ydotool."
     fi
 fi
 echo "Couldn't reach the game window: reload by hand." >&2
