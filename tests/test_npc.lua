@@ -1355,17 +1355,59 @@ T.test("npc shop: the sample's Sell junk fills the strip, its buy back empties i
     T.eq(#DaylightUI.Npc.Shop.Sold(), 0)
 end)
 
-T.test("npc shop: Escape leaves the shop; the number keys never buy", function()
+T.test("npc shop: Escape is left to the game, which closes the shop; the number keys never buy", function()
     local N = load()
     NW.Merchant()
     frame()
     T.eq(N.OnKey("1"), false, "your bar's 1, not a purchase")
     T.eq(#NW.Calls("BuyMerchantItem"), 0)
-    T.eq(N.OnKey("ESCAPE"), true)
+    -- Closing the vendor from addon code would run the game's CloseAllBags tainted.
+    T.eq(N.OnKey("ESCAPE"), false, "passed on to the game")
+    T.eq(#NW.Calls("CloseMerchant"), 0, "not closed from addon code")
+    CloseAllWindows()   -- the game's Escape
     T.eq(#NW.Calls("CloseMerchant"), 1)
     frame(); settle()
     T.eq(N.frame:IsShown(), false)
-    T.deq(NW.Calls("CloseAllBags"), { { "MerchantFrame" } })
+end)
+
+T.test("npc shop: without the game's close button, Escape still closes the shop", function()
+    local N = load()
+    NW.Merchant()
+    frame()
+    local b = MerchantFrame.CloseButton
+    MerchantFrame.CloseButton, _G.MerchantFrameCloseButton = nil, nil
+    T.eq(N.OnKey("ESCAPE"), true)
+    T.eq(#NW.Calls("CloseMerchant"), 1)
+    MerchantFrame.CloseButton, _G.MerchantFrameCloseButton = b, b
+end)
+
+T.test("npc shop: on a controller, B clicks the game's close button through a secure button", function()
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    _G.GamepadMode = { FrameControlsManager = { FrameShown = function() end, FrameHidden = function() end } }
+    local N = load()
+    NW.Merchant()
+    frame()
+    local e
+    for _, k in ipairs(N.frame.padKeys) do if k.key == "B" then e = k end end
+    T.truthy(e, "a B entry")
+    T.truthy(e.when(), "on the shop page")
+    local attrs = e.secure()
+    T.eq(attrs.type, "click")
+    T.eq(attrs.clickbutton, MerchantFrameCloseButton)
+    MerchantFrameCloseButton:Click()   -- what the secure button does
+    T.eq(#NW.Calls("CloseMerchant"), 1)
+    frame(); settle()
+    T.eq(N.frame:IsShown(), false)
+    _G.InputUtil, _G.GamepadMode = nil, nil
+end)
+
+T.test("npc: B is left to the game away from a shop", function()
+    local N = load()
+    NW.Quest("DETAIL", NW.Candles())
+    frame()
+    for _, k in ipairs(N.frame.padKeys) do
+        if k.key == "B" then T.falsy(k.when(), "not taken on a quest") end
+    end
 end)
 
 T.test("npc shop: walking away: the game hides its window, we tell the server", function()
