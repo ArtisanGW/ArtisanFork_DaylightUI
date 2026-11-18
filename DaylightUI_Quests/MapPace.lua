@@ -10,10 +10,10 @@
 --   /dui mappace deep     automatic, and also times the game's own map steps
 --                         (each map data provider, overlay and the game's quest
 --                         list), to see where the game's part of the hitch goes.
---                         Runs twice: with the game's quest pins on, then, 15
---                         seconds later, with them off (the questPOI setting,
---                         put back after, or at the next login if a reload cut
---                         the run short)
+--                         Runs twice in a row: with the game's quest pins on,
+--                         then with them off (the questPOI setting, put back
+--                         after, or at the next login if a reload cut the run
+--                         short)
 --   /dui mappace clear    empties the saved runs
 -- The automatic run closes the map from addon code, and deep puts timers on the
 -- game's map: /reload after either before playing, so nothing is left tainted.
@@ -421,12 +421,10 @@ function Pace.Start(mode, label, after)
     if not profiler() then report("the game's addon profiler is off: frame times only") end
     report(auto and string.format("running %ds%s, the map opens and closes 3 times", Pace.LENGTH, label and (" (" .. label .. ")") or "")
         or string.format("running %ds: open and close the map (M) 3 times", Pace.LENGTH))
+    return true
 end
 
 -- Deep's second run: the game's quest pins off, put back afterwards.
-Pace.GAP = 15   -- seconds between the two runs
-local chain    -- the countdown between the runs, cancelled by combat
-
 local function poiBack()
     local d = db()
     if d and d.poiWas ~= nil then
@@ -440,42 +438,29 @@ local function poiBack()
     end
 end
 
-local function stopChain()
-    if chain then chain:Cancel(); chain = nil end
-end
-
 local function secondRun()
-    chain = nil
     if InCombatLockdown() then report("combat: second run skipped"); return end
     local d = db()
     local was = type(GetCVar) == "function" and GetCVar("questPOI") or nil
     if d and was ~= nil then d.poiWas = was end
     if type(SetCVar) == "function" then pcall(SetCVar, "questPOI", "0") end
-    Pace.Start("deep", "quest pins off", function()
+    local started = Pace.Start("deep", "quest pins off", function()
         poiBack()
         report("both runs saved, /reload to write them (and to clear the map's taint)")
     end)
+    if not started then poiBack() end
 end
 
+-- The second run starts as soon as the first ends: its first open is a second in.
 function Pace.Deep()
-    if run or chain then report("already running"); return end
+    if run then report("already running"); return end
     Pace.Start("deep", "quest pins on", function()
-        if InCombatLockdown() then report("combat: second run skipped"); return end
-        report(string.format("first run done. Second run, with the game's quest pins off, in %d seconds: "
-            .. "I turn them off myself, nothing to do (leave the map closed)", Pace.GAP))
-        local left = Pace.GAP
-        chain = C_Timer.NewTicker(5, function()
-            left = left - 5
-            if left > 0 then report(left .. "...") else stopChain(); secondRun() end
-        end, Pace.GAP / 5)
+        report("first run done, the second turns the game's quest pins off")
+        secondRun()
     end)
 end
 
 DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
-    if chain then
-        stopChain()
-        report("combat: second run cancelled")
-    end
     if run and run.auto then
         run.after = function() poiBack() end
         report("combat: stopped")
