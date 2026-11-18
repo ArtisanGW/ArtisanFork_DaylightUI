@@ -22,7 +22,7 @@ Tracker.OLD_W = 248               -- the info panel's handle width (its position
 Tracker.FALLBACK = { "TOPRIGHT", "UIParent", "TOPRIGHT", -24, -300 }
 Tracker.BOX_PAD = { 8, 10, 6 }    -- box padding around the list: sides, top, bottom (the top clears the header's buttons)
 Tracker.EVENTS = { "QUEST_LOG_UPDATE", "QUEST_WATCH_LIST_CHANGED", "QUEST_ACCEPTED", "QUEST_TURNED_IN",
-    "QUEST_REMOVED", "QUEST_AUTOCOMPLETE", "ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD",
+    "QUEST_REMOVED", "QUEST_AUTOCOMPLETE", "QUEST_DETAIL", "ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD",
     "CONTENT_TRACKING_UPDATE", "TRACKED_ACHIEVEMENT_UPDATE", "PLAYER_REGEN_ENABLED", "SUPER_TRACKING_CHANGED",
     "PLAYER_LEVEL_UP",    -- title difficulty colors depend on the player's level
     "UNIT_QUEST_LOG_CHANGED", "GROUP_ROSTER_UPDATE" }   -- which party members are on a quest
@@ -353,6 +353,7 @@ local function questID(key) return tonumber(string.match(key, "^quest:(%d+)$")) 
 
 function Tracker.EnterStyle(b, r)
     if b.kind == "quest" and r.enter[b.quest.id] then return "slide" end
+    if b.kind == "offer" then return "slide" end
     if r.fold then return "fade" end
     return nil
 end
@@ -361,6 +362,7 @@ function Tracker.LeaveStyle(key, r)
     local id = questID(key)
     if id and r.far[id] then return "far" end
     if id and r.leave[id] then return "slide" end
+    if string.match(key, "^offer:") then return "slide" end
     if r.fold then return "fade" end
     return nil
 end
@@ -602,8 +604,18 @@ Tracker.ALWAYS = { PLAYER_ENTERING_WORLD = true, PLAYER_REGEN_ENABLED = true }
 
 function Tracker.OnEvent(event, a, b)
     local r = Tracker.reasons
-    if event == "QUEST_ACCEPTED" then
-        if type(a) == "number" then r.enter[a] = true end
+    if event == "QUEST_DETAIL" then
+        -- Only an item's quest (a is the item) adds an offer (Data.Offers); the game's
+        -- quest window puts it on the list in this same event, so the list looks next
+        -- frame. In Float mode it brings the tracker back.
+        if type(a) ~= "number" or isSecret(a) or a == 0 then return end
+        DUI.Fade.Wake("Quests.tracker")
+    elseif event == "QUEST_ACCEPTED" then
+        if type(a) == "number" then
+            r.enter[a] = true
+            -- Taken: its offer is done (the game's pop-up would be clicked by now).
+            if type(RemoveAutoQuestPopUp) == "function" then pcall(RemoveAutoQuestPopUp, a) end
+        end
     elseif event == "QUEST_WATCH_LIST_CHANGED" then
         if type(a) == "number" then
             if b then r.enter[a] = true else r.leave[a] = true; Tracker.ForgetProgress(a) end

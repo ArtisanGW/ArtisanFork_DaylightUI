@@ -1,5 +1,5 @@
--- Turns a snapshot into the on-screen list: blocks top to bottom (section header,
--- zone name, quest, achievement), each with a key, a position (y down from the
+-- Turns a snapshot into the on-screen list: blocks top to bottom (quest offer,
+-- section header, zone name, quest, achievement), each with a key, a position (y down from the
 -- top) and a height, plus a quest's lines inside it. Keys name what a block shows
 -- ("quest:123"), never where it is, so a block keeps its frame while it moves.
 -- Pure: text heights come from measure().
@@ -114,6 +114,14 @@ local function achBlock(a, o, measure, gap)
     return { key = "ach:" .. a.id, kind = "ach", ach = a, lines = lines, h = y + gap }
 end
 
+-- A quest an item started (Data.Offers): its title and a line saying a click opens it.
+local function offerBlock(q, o, measure, gap)
+    local lines = {}
+    local y = titleLine(lines, q.title, o, measure)
+    y = textLine(lines, "offer", "offer", ns.Data.OFFER, o, measure, y)
+    return { key = "offer:" .. q.id, kind = "offer", offer = q, lines = lines, h = y + gap }
+end
+
 -- Most recent progress first. Quests with an entry in recent (questID -> number,
 -- higher = newer) go first, newest on top, and the rest keep the game's order
 -- below them. Sorts the snapshot's list in place.
@@ -202,6 +210,8 @@ function Layout.Build(snap, o, measure)
                folded = folds[id] == true, textH = textH,
                h = textH + Layout.HEADER_PAD + Layout.HEADER_LINE + Layout.HEADER_GAP })
     end
+    -- Offers first, above every section, so a new one is seen.
+    for _, q in ipairs(snap.offers or {}) do push(offerBlock(q, o, measure, gap)) end
     local total = 0
     for _, g in ipairs(snap.groups) do total = total + #g.quests end
     if total > 0 or o.emptyHeader then

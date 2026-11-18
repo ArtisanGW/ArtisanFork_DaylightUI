@@ -11,6 +11,8 @@ ns.Data = Data
 local L = DaylightUI.L
 Data.READY = L["Ready to turn in"]   -- turn-in line when the game gives none
 Data.AUTO = L["Click to complete"]
+Data.OFFER = L["New quest: click to view it"]   -- a quest an item started (Data.Offers)
+Data.OFFER_TITLE = L["New quest"]             -- its title when the game doesn't have it yet
 Data.OTHER = L["Other"]              -- quests the log lists under no header
 Data.LOG_MAX = 25                 -- fallback when the game doesn't say
 
@@ -207,6 +209,27 @@ function Data.Achievements()
     return out
 end
 
+-- Quests an item started. Using a quest-starting item doesn't open the quest: the
+-- game's quest window puts it in its pop-up list (AddAutoQuestPopUp, "OFFER") and
+-- closes, and its own tracker shows it until clicked. That tracker never runs next
+-- to this one, so this one shows them. A quest already in the log has been taken.
+-- ("COMPLETE" pop-ups need no row of their own: that quest's row already says
+-- Click to complete.)
+function Data.Offers()
+    local out = {}
+    local n = call(GetNumAutoQuestPopUps)
+    local QL = C_QuestLog
+    for i = 1, (type(n) == "number" and n or 0) do
+        local id, kind = call(GetAutoQuestPopUp, i)
+        local inLog = type(id) == "number" and call(api(QL, "GetLogIndexForQuestID"), id)
+        if type(id) == "number" and kind == "OFFER" and type(inLog) ~= "number" then
+            local title = call(api(QL, "GetTitleForQuestID"), id)
+            out[#out + 1] = { id = id, title = (type(title) == "string" and title ~= "") and title or Data.OFFER_TITLE }
+        end
+    end
+    return out
+end
+
 -- Quests to show: the watch list, or (filter "log") every quest in log order
 -- without adding watches.
 local function questIDs(filter, indexOf)
@@ -326,7 +349,7 @@ end
 
 function Data.Snapshot(filter)
     local QL = C_QuestLog
-    local snap = { groups = {}, achievements = Data.Achievements() }
+    local snap = { groups = {}, achievements = Data.Achievements(), offers = Data.Offers() }
     local _, numQuests = call(api(QL, "GetNumQuestLogEntries"))
     snap.logCount = type(numQuests) == "number" and numQuests or 0
     local most = call(api(QL, "GetMaxNumQuestsCanAccept"))

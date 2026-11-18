@@ -4,7 +4,7 @@
 -- box (each click's action is configurable, Clicks.Binding), right-click opens the
 -- menu (Quest details opens the card in Details.lua), and hovering shows a tooltip
 -- beside the list. Section headers and zone names fold. Achievements open their
--- window. Only safe game functions are called (C_Map.OpenWorldMap, never the
+-- window. A quest an item started opens its offer, as the game's pop-up does. Only safe game functions are called (C_Map.OpenWorldMap, never the
 -- quest map's own Lua, which taints the map).
 
 local _, ns = ...
@@ -31,6 +31,7 @@ Clicks.ACTION_WORDS = { map = L["show on map"], details = L["quest details"], pr
 Clicks.BUTTONS = { "click", "shift", "ctrl", "alt" }
 Clicks.BUTTON_HINT = { click = L["Click: %s"], shift = L["Shift-click: %s"], ctrl = L["Ctrl-click: %s"], alt = L["Alt-click: %s"] }
 Clicks.DEFAULT = { click = "map", shift = "untrack", ctrl = "priority", alt = "none" }
+Clicks.OFFER_HINT = L["Click: view the quest"]
 Clicks.ACH_HINTS = { L["Click: open achievements"], L["Shift-click: stop tracking"] }
 Clicks.TIP_GAP = 44        -- keeps the tooltip clear of the item column (34 + 10)
 Clicks.ICON_HIT = 18       -- the icon area of a quest row, up to where the title starts
@@ -145,12 +146,22 @@ function Clicks.Achievement(a)
     if type(OpenAchievementFrameToAchievement) == "function" then OpenAchievementFrameToAchievement(a.id) end
 end
 
+-- What the game's pop-up does on a click (Blizzard_AutoQuestPopUpTracker.lua): show the
+-- quest's offer, and take the pop-up off the list.
+function Clicks.Offer(q, button)
+    if button ~= "LeftButton" then return end
+    if type(ShowQuestOffer) == "function" then ShowQuestOffer(q.id) end
+    if type(RemoveAutoQuestPopUp) == "function" then RemoveAutoQuestPopUp(q.id) end
+    ns.Tracker.Queue(true)
+end
+
 function Clicks.OnClick(f, button)
     local b = f.block
     if not b then return end
     if b.kind == "zone" and IsShiftKeyDown and IsShiftKeyDown() then ns.Tracker.FoldZoneQuests(b.label)
     elseif b.kind == "header" or b.kind == "zone" then ns.Tracker.ToggleFold(b.id)
     elseif b.kind == "ach" then Clicks.Achievement(b.ach, button)
+    elseif b.kind == "offer" then Clicks.Offer(b.offer, button)
     elseif b.kind == "quest" then Clicks.Quest(b.quest, button, f) end
 end
 
@@ -288,6 +299,13 @@ function Clicks.OnEnter(f)
     GameTooltip:SetPoint("TOPRIGHT", f, "TOPLEFT", -Clicks.TIP_GAP, 0)
     if b.kind == "quest" then
         Clicks.QuestTip(b.quest)
+    elseif b.kind == "offer" then
+        local Tips = DUI.Tips
+        Tips.Clear()
+        Tips.Title(b.offer.title)
+        Tips.Gap()
+        Tips.Hint(Clicks.OFFER_HINT)
+        Tips.Flush(GameTooltip)
     else
         Clicks.AchievementTip(b.ach)
     end
@@ -295,7 +313,7 @@ function Clicks.OnEnter(f)
 end
 
 function Clicks.OnLeave(f)
-    if f.kind == "quest" or f.kind == "ach" then f:SetScript("OnUpdate", nil) end
+    if f.kind ~= "header" and f.kind ~= "zone" then f:SetScript("OnUpdate", nil) end
     f.hoverPart = nil
     ns.Rows.Hover(f, false)
     if f.kind == "quest" or f.kind == "ach" then ns.Tracker.HoverDim(nil) end

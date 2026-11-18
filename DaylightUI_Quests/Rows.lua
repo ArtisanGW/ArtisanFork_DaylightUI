@@ -54,7 +54,7 @@ local function newBlock(kind, parent)
         f.hi:SetPoint("TOPLEFT", f, "TOPLEFT", 0, Rows.HI_PAD)
         f.hi:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, -Rows.HI_PAD)
         f.hi:Hide()
-        for _, name in ipairs({ "ring", "ready", "failed" }) do
+        for _, name in ipairs({ "ring", "ready", "failed", "offer" }) do
             local t = f:CreateTexture(nil, "ARTWORK")
             t:SetSize(Layout.ICON, Layout.ICON)
             t:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -1)
@@ -64,6 +64,7 @@ local function newBlock(kind, parent)
         f.ring:SetTexture(Look.ICONS.progress)
         f.ready:SetTexture(Look.ICONS.ready)
         f.failed:SetTexture(Look.ICONS.failed)
+        f.offer:SetTexture(Look.ICONS.offer)
     end
     return f
 end
@@ -243,7 +244,7 @@ function Rows.Dim(f, a)
             if p.SetAlpha then p:SetAlpha(a) end
         end
     end
-    for _, name in ipairs({ "ring", "ready", "failed" }) do
+    for _, name in ipairs({ "ring", "ready", "failed", "offer" }) do
         if f[name] then f[name]:SetAlpha(a) end
     end
 end
@@ -367,6 +368,7 @@ local function paintBlock(f, b, look, opts, events)
     f.ready:SetVertexColor(Look.Color(look, "ready"))
     f.failed:SetShown(state == "failed")
     f.failed:SetVertexColor(Look.Color(look, "failed"))
+    f.offer:SetShown(b.kind == "offer")
     if q and q.focus and state ~= "failed" then Look.PaintFocus(state == "ready" and f.ready or f.ring, look) end
     if opts.fx and f.painted and q and f.state ~= "ready" and state == "ready" then
         events.ready = true
@@ -445,6 +447,7 @@ end
 local function iconOf(f)
     if f.ready:IsShown() then return f.ready end
     if f.failed:IsShown() then return f.failed end
+    if f.offer:IsShown() then return f.offer end
     return f.ring
 end
 

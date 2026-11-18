@@ -14,6 +14,7 @@ Look.ICONS = {
     progress = DUI.MEDIA .. "quest-progress.png",   -- three-quarter ring
     ready = DUI.MEDIA .. "quest-ready.png",         -- the "?"
     failed = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+    offer = "Interface\\GossipFrame\\AvailableQuestIcon",   -- the "!" of a quest an item started
     tick = "Interface\\RaidFrame\\ReadyCheck-Ready",
 }
 Look.RING = { 0.85, 0.85, 0.88 }

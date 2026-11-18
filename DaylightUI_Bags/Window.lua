@@ -463,9 +463,16 @@ local function padItem(b)
     return info, bag, slot
 end
 
+-- An item that starts a quest you don't have yet (Chen's Empty Keg): a right
+-- click offers the quest, though the item has no spell.
+local function startsQuest(bag, slot)
+    local ok, q = pcall(C_Container.GetContainerItemQuestInfo, bag, slot)
+    return ok and type(q) == "table" and type(q.questID) == "number" and not q.isActive
+end
+
 -- What a right click does to this item here, in the game's own words.
 function Window.PadUseLabel(f, b)
-    local info = padItem(b)
+    local info, bag, slot = padItem(b)
     if not info then return nil end
     if f.kind == "bank" then return L["To your bags"] end
     if ns.Bank and ns.Bank.open then return L["To the bank"] end
@@ -475,7 +482,9 @@ function Window.PadUseLabel(f, b)
     if info.isReadable then return CONTEXT_ACTION_LABEL_READ or L["Read"] end
     local link = info.hyperlink
     if link and C_Item.IsEquippableItem and C_Item.IsEquippableItem(link) then return CONTEXT_ACTION_LABEL_EQUIP or L["Equip"] end
-    if C_Item.GetItemSpell and C_Item.GetItemSpell(info.itemID) then return CONTEXT_ACTION_LABEL_USE or L["Use"] end
+    if (C_Item.GetItemSpell and C_Item.GetItemSpell(info.itemID)) or startsQuest(bag, slot) then
+        return CONTEXT_ACTION_LABEL_USE or L["Use"]
+    end
     return nil
 end
 

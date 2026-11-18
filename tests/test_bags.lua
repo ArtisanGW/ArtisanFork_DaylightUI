@@ -6393,6 +6393,30 @@ T.test("bags on a controller: X does an item's right click through a secure key,
     _G.GamepadMode, _G.InputUtil, _G.SmartNavigation = nil, nil, nil
 end)
 
+-- In game: Chen's Empty Keg starts a quest and has no spell, so X showed nothing.
+T.test("bags on a controller: X uses an item that starts a quest you don't have", function()
+    local ns = login()
+    world.items[0][1].itemID = 1
+    C_Item.GetItemSpell = function() return nil end
+    C_Item.IsEquippableItem = function() return false end
+    local active = false
+    C_Container.GetContainerItemQuestInfo = function(bag, slot)
+        if bag == 0 and slot == 1 then return { isQuestItem = true, questID = 7, isActive = active } end
+        return {}
+    end
+    padOn()
+    local at = ns.Bags.buttons[0][1]
+    _G.SmartNavigation = { GetCurrentButton = function() return at end }
+    local f = open(ns)
+    stub.RunTimers()
+    T.eq(ns.Window.PadUseLabel(f, at), CONTEXT_ACTION_LABEL_USE or "Use")
+    T.truthy(stub.overrides.PAD3, "X is bound")
+    T.eq(_G[stub.overrides.PAD3.click]:GetAttribute("clickbutton"), at)
+    active = true
+    T.eq(ns.Window.PadUseLabel(f, at), nil, "on the quest already: using it does nothing")
+    _G.GamepadMode, _G.InputUtil, _G.SmartNavigation = nil, nil, nil
+end)
+
 -- The game's delete question can't be asked from addon code: it opens inside
 -- the call and carries the addon's taint into the controller (tests/test_guards).
 -- So the menu row itself asks ("Click again"), and only then is it deleted.
