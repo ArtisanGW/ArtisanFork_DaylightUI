@@ -1,34 +1,33 @@
--- Local dev helper, never shipped (it lives under tools/). After a new build is
--- copied into the game's AddOns folder, tools/game_reload.sh presses KEY in the
--- game, and this shows Daylight UI's own question box. Its Reload is a real
--- (secure) /reload: this client refuses ReloadUI() from addon code, so a click on
--- it is the one thing left to do.
+-- Local dev helper, never shipped (it lives under tools/), and standalone: it
+-- needs no other addon. After a new build is copied into the game's AddOns
+-- folder, tools/game_reload.sh presses KEY in the game. The key clicks a secure
+-- macro button whose macro is /reload, and a key press is a hardware click, so
+-- the game reloads at once (it refuses ReloadUI() called from addon code).
 
 local KEY = "CTRL-ALT-SHIFT-F9"    -- tools/game_reload.sh presses the same keys
 local BUTTON = "DaylightUIDevReloadButton"
-local TEXT = "A new Daylight UI build is in the AddOns folder. Reload to load it?"
 
 local Dev = {}
 DaylightUIDevReload = Dev
-Dev.KEY, Dev.TEXT = KEY, TEXT
+Dev.KEY = KEY
 
-function Dev.Ask()
-    local DUI = DaylightUI
-    local W = DUI and DUI.Widgets
-    if not (W and W.Ask) then return end
-    local L = DUI.L or {}
-    W.Ask({ key = "devReload", reload = true, text = TEXT,
-            yes = RELOADUI or L["Reload"], no = LATER or L["Later"] })
-end
-
--- The key clicks this button (an override binding, so the player's own key
--- bindings are left alone and nothing is saved).
-local button = CreateFrame("Button", BUTTON, UIParent)
-button:SetScript("OnClick", function() Dev.Ask() end)
+local button = CreateFrame("Button", BUTTON, UIParent, "SecureActionButtonTemplate")
+button:SetAttribute("type", "macro")
+button:SetAttribute("macrotext", "/reload")
+-- Key bindings click on the down or the up press depending on the
+-- ActionButtonUseKeyDown setting; either reloads.
+button:RegisterForClicks("AnyDown", "AnyUp")
 Dev.button = button
 
+-- An override binding, so the player's own key bindings are left alone and
+-- nothing is saved. Bindings can't change in combat: then it waits.
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
-events:SetScript("OnEvent", function()
+events:SetScript("OnEvent", function(self, event)
+    if InCombatLockdown() then
+        self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
     SetOverrideBindingClick(button, true, KEY, BUTTON, "LeftButton")
 end)
