@@ -5,10 +5,10 @@
 -- the game reloads at once (it refuses ReloadUI() called from addon code).
 
 local KEY = "ALT-CTRL-SHIFT-F9"    -- the game only reads modifiers in this order; game_reload.sh presses the same keys
-local BUTTON = "DaylightUIDevReloadButton"
+local BUTTON = "DevReloadButton"
 
 local Dev = {}
-DaylightUIDevReload = Dev
+DevReload = Dev
 Dev.KEY = KEY
 
 local button = CreateFrame("Button", BUTTON, UIParent, "SecureActionButtonTemplate")
