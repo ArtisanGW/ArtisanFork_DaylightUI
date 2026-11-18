@@ -79,6 +79,10 @@ local told = setmetatable({}, { __mode = "k" }) -- frames the game knows are ope
 Pad.aimed = setmetatable({}, { __mode = "k" }) -- padFirst already ran for this opening
 local followed = setmetatable({}, { __mode = "k" }) -- every frame the game is kept informed about
 local fight = false -- handed back, fight not over yet
+-- Frames the game's navigation has served. It hooks their OnHide for good, and
+-- that hook makes a wrapped call (Pad.PutAway).
+local panels = setmetatable({}, { __mode = "k" })
+local away = setmetatable({}, { __mode = "k" })   -- frame -> what Pad.PutAway changed
 local forgetting = setmetatable({}, { __mode = "k" }) -- parked game windows waiting for one of Daylight UI's to be listed
 
 local function manager()
@@ -1045,15 +1049,17 @@ local function sync(frame, focus)
         DUI.AfterCombat(function() sync(frame, focus) end, frame)
         return
     end
-    local open = frame:IsShown()
+    local open = frame:IsShown() and not away[frame]
     if open == (told[frame] == true) then return end
     told[frame] = open or nil
     if not open then
         Pad.aimed[frame] = nil
         m:FrameHidden(frame)
     elseif frame.padSecond and not focus and m.GetActiveFrame and m:GetActiveFrame() then
+        panels[frame] = true
         m:FrameShown(frame, nil, false)
     else
+        panels[frame] = true
         m:FrameShown(frame)
     end
     if open and next(forgetting) then
@@ -1227,6 +1233,68 @@ end
 
 local relist = {} -- the game's own windows handed back for the fight, still shown
 
+-- Closing a window the game's navigation has served, in a fight: its OnHide hook
+-- calls the game's wrapped RemovePanelInfo, which is refused in combat when addon
+-- code did the Hide ("Interface action failed because of an AddOn", and the
+-- navigation keeps a window that's gone). So it isn't hidden: its parts are,
+-- and it goes clear and lets the mouse through. It counts as closed (Pad.Away)
+-- and is really hidden once the fight is over. Returns false when a plain Hide
+-- is fine, leaving the Hide to the caller.
+local function refused(frame)
+    return panels[frame] == true and (InCombatLockdown() or combatActive())
+end
+
+-- A child the game's navigation frame sits in stays: hiding it would hide that
+-- frame from addon code.
+local function holdsNav(c)
+    local f = _G.SmartNavigation
+    while type(f) == "table" and f.GetParent do
+        if f == c then return true end
+        f = f:GetParent()
+    end
+    return false
+end
+
+function Pad.PutAway(frame)
+    if not frame:IsShown() or not refused(frame) then return false end
+    if away[frame] then return true end
+    local parts = {}
+    for _, c in ipairs({ frame:GetChildren() }) do
+        if c:IsShown() and not (c.IsProtected and c:IsProtected()) and not holdsNav(c) then
+            c:Hide()
+            parts[#parts + 1] = c
+        end
+    end
+    local mouse = frame.IsMouseEnabled and frame:IsMouseEnabled() == true
+    if mouse then frame:EnableMouse(false) end
+    frame:SetAlpha(0)
+    away[frame] = { parts = parts, mouse = mouse }
+    return true
+end
+
+function Pad.Away(frame) return away[frame] ~= nil end
+
+-- Undoes Pad.PutAway: opened again, or hidden for real.
+function Pad.Back(frame)
+    local a = away[frame]
+    if not a then return end
+    away[frame] = nil
+    for _, c in ipairs(a.parts) do c:Show() end
+    if a.mouse then frame:EnableMouse(true) end
+    frame:SetAlpha(1)
+end
+
+local function hideAway()
+    local list = {}
+    for frame in pairs(away) do list[#list + 1] = frame end
+    for _, frame in ipairs(list) do
+        if not refused(frame) then
+            frame:Hide()
+            Pad.Back(frame)
+        end
+    end
+end
+
 -- Called while the game still listens. Inside the restriction's own event it
 -- reports "not active", and PLAYER_REGEN_DISABLED fires before lockdown.
 local function handBack()
@@ -1257,6 +1325,7 @@ end
 
 local function takeBack()
     fight = false
+    hideAway()
     local asked = waiting
     waiting = {}
     for _, fn in pairs(asked) do fn() end
