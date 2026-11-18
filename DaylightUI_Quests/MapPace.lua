@@ -16,9 +16,8 @@
 --                         short)
 --   /dui mappace clear    empties the saved runs
 -- The automatic run closes the map from addon code, and deep puts timers on the
--- game's map: every run ends with a reload (Pace.RELOAD seconds after), which
--- writes the results and clears the taint. Out of combat only: in a fight it
--- waits for the fight to end.
+-- game's map: every run ends with a Reload button (see reloadSoon), which writes
+-- the results and clears the taint.
 
 local _, ns = ...
 local DUI = DaylightUI
@@ -31,7 +30,6 @@ local Pace = {
     HITCH = 25,           -- ms: frames longer than this are kept in full
     RUNS = 5,             -- runs kept in the saved variables
     MAX_HITCHES = 60,     -- frames kept in full per run
-    RELOAD = 3,           -- seconds from the end of the runs to the reload
 }
 ns.MapPace = Pace
 
@@ -46,22 +44,21 @@ local undo = {}        -- functions to put back when the run ends
 
 local function report(text) print("Daylight UI mappace: " .. text) end
 
--- The end of the runs: reload so the game writes the results to disk.
+-- The end of the runs: a reload writes the results to disk and clears the map's
+-- taint. Addon code can't call ReloadUI on this client (only a click can), so
+-- the runs end with the Daylight question box, whose Reload is a secure /reload
+-- button: one click or press. In a fight the box waits for it to end. English
+-- only, like the rest of this debug tool.
+Pace.ASK = "Map timing done. Reload now to save the results (and clear the map's taint)?"
 local function reloadSoon()
-    report(string.format("saved, reloading in %d seconds to write the results", Pace.RELOAD))
-    C_Timer.After(Pace.RELOAD, function()
-        local function go()
-            if type(ReloadUI) == "function" then ReloadUI() end
-            -- still here a moment later: the game refused it
-            C_Timer.After(2, function() report("the reload didn't happen, /reload to write the results") end)
-        end
-        if InCombatLockdown() then
-            report("in combat: reloading when the fight ends")
-            DUI.AfterCombat(go, "mappace:reload")
-        else
-            go()
-        end
-    end)
+    report("saved, click Reload in the box to write the results")
+    local W, L = DUI.Widgets, DUI.L
+    if W and W.Ask then
+        W.Ask({ key = "mapPaceReload", text = Pace.ASK, reload = true,
+                yes = RELOADUI or L["Reload"], no = LATER or L["Later"] })
+    else
+        report("/reload to write the results")
+    end
 end
 
 local function db()
