@@ -1506,6 +1506,40 @@ T.test("quests clicks: an auto-complete quest completes on click", function()
     T.deq(QW.Calls("complete"), { 1 })
 end)
 
+-- In game: right-clicking Chen's Empty Keg did nothing. The game's quest window
+-- puts an item's quest on its pop-up list and closes; only the tracker shows it.
+T.test("quests offers: a quest an item started shows on top, a click opens it", function()
+    local Tr, ns = tracker({ quests = { STEW }, titles = { [7] = "Chen's Empty Keg" } })
+    AddAutoQuestPopUp(7, "OFFER")
+    stub.FireEvent("QUEST_DETAIL", 12345); stub.RunTimers()
+    local f = Tr.frames["offer:7"]
+    T.truthy(f, "offer row")
+    T.eq(Tr.shown[1].key, "offer:7", "above the quests")
+    T.eq(f.lines.title.label:GetText(), "Chen's Empty Keg")
+    T.eq(f.lines.offer.label:GetText(), ns.Data.OFFER)
+    T.eq(f.offer:IsShown(), true, "the ! icon")
+    click(Tr, "offer:7")
+    T.deq(QW.Calls("offer"), { 7 })
+    T.eq(GetNumAutoQuestPopUps(), 0, "off the game's list")
+    stub.RunTimers()
+    T.isnil(Tr.frames["offer:7"])
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)
+
+T.test("quests offers: a quest from an NPC, a hand-in pop-up or a quest in the log adds no row", function()
+    local Tr = tracker({ quests = { STEW }, popups = { { 1, "OFFER" }, { 1, "COMPLETE" } } })
+    stub.FireEvent("QUEST_DETAIL", 0); stub.RunTimers()
+    for key in pairs(Tr.frames) do T.falsy(key:match("^offer:"), key) end
+end)
+
+T.test("quests offers: accepting the quest takes its offer off the list", function()
+    local Tr = tracker({ quests = {}, popups = { { 7, "OFFER" } }, titles = { [7] = "Chen's Empty Keg" } })
+    T.truthy(Tr.frames["offer:7"])
+    stub.FireEvent("QUEST_ACCEPTED", 7); stub.RunTimers()
+    T.eq(GetNumAutoQuestPopUps(), 0)
+    T.isnil(Tr.frames["offer:7"])
+end)
+
 T.test("quests clicks: a click on the icon makes the quest the priority; again clears it", function()
     local Tr = tracker({ quests = { STEW, QW.quest(2, "B") } })
     local f = Tr.frames["quest:1"]

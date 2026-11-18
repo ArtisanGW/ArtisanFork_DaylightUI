@@ -100,7 +100,10 @@ function QW.world(spec)
             GetMaxNumQuestsCanAccept = function() return 25 end,
             GetInfo = function(i) return log()[i] end,
             GetLogIndexForQuestID = indexOf,
-            GetTitleForQuestID = function(id) local q = find(id); return q and q.title end,
+            GetTitleForQuestID = function(id)
+                local q = find(id)
+                return q and q.title or (S().titles or {})[id]
+            end,
             -- onParty = { "party1", ... } lists who else has it (spec.partySize: GetNumSubgroupMembers)
             IsUnitOnQuest = function(unit, id)
                 for _, u in ipairs(find(id) and find(id).onParty or {}) do if u == unit then return true end end
@@ -238,6 +241,17 @@ function QW.world(spec)
         -- (ADDON_ACTION_BLOCKED in game, with combat lockdown on).
         _G.QuestLogPushQuest = function(i) record(InCombatLockdown() and "shareBlocked" or "share", i) end
         _G.ShowQuestComplete = function(id) record("complete", id) end
+        -- The game's pop-up list (spec.popups = { { questID, "OFFER" or "COMPLETE" } }):
+        -- the quest window adds an item's quest to it (AddAutoQuestPopUp), the
+        -- tracker shows it until clicked. spec.titles: names of quests not in the log.
+        s.popups = s.popups or {}
+        _G.GetNumAutoQuestPopUps = function() return #S().popups end
+        _G.GetAutoQuestPopUp = function(i) local p = S().popups[i]; if p then return p[1], p[2] end end
+        _G.AddAutoQuestPopUp = function(id, kind) table.insert(S().popups, { id, kind }); return true end
+        _G.RemoveAutoQuestPopUp = function(id)
+            for i = #S().popups, 1, -1 do if S().popups[i][1] == id then table.remove(S().popups, i) end end
+        end
+        _G.ShowQuestOffer = function(id) record("offer", id) end
         _G.QuestMapQuestOptions_AbandonQuest = function(id) record("abandon", id) end
         _G.OpenAchievementFrameToAchievement = function(id) record("achievement", id) end
         _G.PlaySound = function(id) record("sound", id) end
