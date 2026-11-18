@@ -72,6 +72,21 @@ local function mapSources()
         { "UIPanelWindows", _G.UIPanelWindows },
         { "WorldMapFrame", map },
     }
+    for _, name in ipairs({ "BuffFrame", "DebuffFrame" }) do
+        local f = _G[name]
+        if type(f) == "table" then
+            out[#out + 1] = { name, f }
+            out[#out + 1] = { name .. ".auraInfo", f.auraInfo }
+            if type(f.auraFrames) == "table" then
+                out[#out + 1] = { name .. ".auraFrames", f.auraFrames }
+                for i, b in ipairs(f.auraFrames) do
+                    if i > 6 then break end
+                    out[#out + 1] = { name .. ".aura" .. i, b }
+                    if type(b) == "table" then out[#out + 1] = { name .. ".aura" .. i .. ".buttonInfo", b.buttonInfo } end
+                end
+            end
+        end
+    end
     if type(map) == "table" then
         out[#out + 1] = { "WorldMapFrame.dataProviders", map.dataProviders }
         out[#out + 1] = { "WorldMapFrame.ScrollContainer", map.ScrollContainer }
@@ -212,6 +227,50 @@ local function hookOnce()
     end
 end
 
+local function bagState()
+    local w = ns.window
+    if not w then return "no bag" end
+    local away = DUI.Pad and DUI.Pad.Away and DUI.Pad.Away(w)
+    local kids, shownKids = 0, 0
+    for _, c in ipairs({ w:GetChildren() }) do
+        kids = kids + 1
+        if c:IsShown() then shownKids = shownKids + 1 end
+    end
+    return string.format("bag shown=%s alpha=%.2f away=%s parts %d/%d mouse=%s", tostring(w:IsShown()),
+        w:GetAlpha(), tostring(away), shownKids, kids, tostring(w:IsMouseEnabled()))
+end
+
+local wrapped = false
+local function wrapPad()
+    local P = DUI.Pad
+    if wrapped or not (P and P.PutAway and P.Back) then return end
+    wrapped = true
+    local put, back = P.PutAway, P.Back
+    P.PutAway = function(frame)
+        local r = put(frame)
+        if ticker and frame == ns.window then
+            write("PutAway -> " .. tostring(r) .. "  lockdown=" .. tostring(InCombatLockdown()) .. "  " .. bagState())
+            writeStack(stackText())
+        end
+        return r
+    end
+    P.Back = function(frame)
+        local was = P.Away(frame)
+        back(frame)
+        if ticker and frame == ns.window and was then
+            write("Back  lockdown=" .. tostring(InCombatLockdown()) .. "  " .. bagState())
+            writeStack(stackText())
+        end
+    end
+end
+
+local lastBag
+local function watchBag()
+    if not InCombatLockdown() then lastBag = nil; return end
+    local s = bagState()
+    if s ~= lastBag then write("in fight: " .. s); lastBag = s end
+end
+
 local function watchWindow()
     local w = ns.window
     if not w or w.padTaintHooked then return end
@@ -224,8 +283,10 @@ function Debug.Start()
     hookOnce()
     seen = scan()
     if ticker then ticker:Cancel() end
+    wrapPad()
     ticker = C_Timer.NewTicker(Debug.EVERY, function()
         watchWindow()
+        watchBag()
         Debug.Tick()
     end)
     Debug.Snapshot("start")
@@ -241,6 +302,11 @@ local EVENTS = { "MERCHANT_SHOW", "MERCHANT_CLOSED", "PLAYER_INTERACTION_MANAGER
 for _, e in ipairs(EVENTS) do
     DUI.RegisterEvent(e, function(event, a) if ticker then note(event .. (a ~= nil and (" " .. tostring(a)) or "")) end end)
 end
+DUI.RegisterEvent("PLAYER_IN_COMBAT_CHANGED", function(_, on)
+    if not ticker then return end
+    note("PLAYER_IN_COMBAT_CHANGED " .. tostring(on))
+    Debug.Snapshot("PLAYER_IN_COMBAT_CHANGED " .. tostring(on) .. "  " .. bagState())
+end)
 for _, e in ipairs({ "ADDON_ACTION_FORBIDDEN", "ADDON_ACTION_BLOCKED" }) do
     DUI.RegisterEvent(e, function(event, addon, fn)
         if not ticker then return end
