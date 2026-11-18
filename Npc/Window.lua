@@ -483,7 +483,10 @@ function Npc.OnKey(key)
     -- and Space/Enter on Train all could empty the purse.
     if S.mode == "merchant" or S.mode == "trainer" then
         if key == "ESCAPE" then
-            if ns.Shop.AskOpen() then ns.Shop.AskClose() else Npc.Goodbye() end   -- quantity box first
+            if ns.Shop.AskOpen() then ns.Shop.AskClose(); return true end   -- quantity box first
+            -- The game's Escape closes a merchant cleanly (Npc.MerchantClose says why).
+            if S.mode == "merchant" and Npc.MerchantClose() then return false end
+            Npc.Goodbye()
             return true
         end
         return space(false)
@@ -963,8 +966,33 @@ function Npc.PadSelect(b)
     return nil
 end
 
+-- Closing a merchant from addon code (CloseMerchant, or hiding MerchantFrame) runs
+-- the game's MerchantFrame_OnHide tainted, and its CloseAllBags(MerchantFrame)
+-- then writes the game's FRAME_THAT_OPENED_BAGS (ContainerFrame.lua) while
+-- tainted. Every later CloseAllBags or OpenAllBags reads it, so the game's
+-- bag, map and controller code ran tainted from then on: "Interface action
+-- failed" and SetPreferredGamepadInteractTarget refused, until Escape cleared
+-- it. So B clicks the game's own close button through a secure button (a key
+-- press is a hardware click), and Escape is left to the game.
+function Npc.MerchantClose()
+    local m = _G.MerchantFrame
+    local b = _G.MerchantFrameCloseButton or (type(m) == "table" and m.CloseButton) or nil
+    if not (S.mode == "merchant" and type(m) == "table" and m:IsShown() and b) then return nil end
+    return b
+end
+
+local function merchantB()
+    return { key = "B", label = L["Goodbye"],
+        when = function() return Npc.MerchantClose() ~= nil end,
+        secure = function()
+            local b = Npc.MerchantClose()
+            return b and { type = "click", clickbutton = b } or nil
+        end }
+end
+
 function Npc.PadKeys()
     return {
+        merchantB(),
         { key = "X", label = CONTEXT_ACTION_LABEL_MULTI_BUY or L["Buy a stack"],
           when = function(b) return ns.Shop.CanStack(shopItem(b)) end,
           run = function(b) ns.Shop.Ask(shopItem(b), b) end },
