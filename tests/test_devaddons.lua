@@ -1,12 +1,13 @@
 local stub = require("stub")   -- T (test helpers) is a global set by tests/run.lua
 
--- The local dev tools (tools/devaddons, never shipped): each its own addon in the
--- game's Development Tools group, loaded after the module it looks into.
+-- The local dev tools (tools/devaddons, never shipped): vanilla addons that use
+-- only the game, never another addon, each in the game's Development Tools
+-- group. Run here against the fake game alone (stub.Reset), with no other addon.
 
 local TOOLS = {
-    { addon = "DaylightUI_DevQuestLog", file = "QuestLog.lua", command = "questlog", load = { quests = true }, dep = "DaylightUI_Quests" },
-    { addon = "DaylightUI_DevMapPace", file = "MapPace.lua", command = "mappace", load = { quests = true }, dep = "DaylightUI_Quests" },
-    { addon = "DaylightUI_DevPadTaint", file = "PadTaint.lua", command = "padtaint", load = { bags = true }, dep = "DaylightUI_Bags" },
+    { addon = "DevQuestLog", file = "QuestLog.lua", command = "questlog", slash = "DEVQUESTLOG", sv = "DevQuestLogDB" },
+    { addon = "DevMapPace", file = "MapPace.lua", command = "mappace", slash = "DEVMAPPACE", sv = "DevMapPaceDB" },
+    { addon = "DevPadTaint", file = "PadTaint.lua", command = "padtaint", slash = "DEVPADTAINT", sv = "DevPadTaintDB" },
 }
 
 local function read(path)
@@ -16,38 +17,32 @@ end
 for _, t in ipairs(TOOLS) do
     local dir = "tools/devaddons/" .. t.addon .. "/"
 
-    T.test("devaddons: " .. t.addon .. " loads after its module and adds /dui " .. t.command, function()
-        stub.Load(t.load)
-        T.falsy(DaylightUI.HasCommand(t.command), "not part of Daylight UI any more")
-        local chunk = assert(loadfile(dir .. t.file))
-        chunk(t.addon, {})
-        T.truthy(DaylightUI.HasCommand(t.command), "its own addon adds it")
+    T.test("devaddons: " .. t.addon .. " runs on the game alone and adds /" .. t.command, function()
+        stub.Reset()
+        T.eq(_G.DaylightUI, nil, "no other addon loaded")
+        assert(loadfile(dir .. t.file))(t.addon, {})
+        stub.FireEvent("PLAYER_LOGIN")
+        T.eq(_G["SLASH_" .. t.slash .. "1"], "/" .. t.command, "its own slash command")
+        SlashCmdList[t.slash]("clear")
+        SlashCmdList[t.slash]("")
         stub.RunTimers()
-        -- Only the tool's own errors: the bare test world has no bags, which the
-        -- Bags module notices on its own (test_bags builds a bag world for that).
-        local mine = {}
-        for _, e in ipairs(stub.errors) do
-            if tostring(e):find(t.file, 1, true) then mine[#mine + 1] = e end
-        end
-        T.eq(#mine, 0, tostring(mine[1]))
+        T.eq(type(_G[t.sv]), "table", "its own saved variables")
+        T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+        _G[t.sv] = nil
     end)
 
-    T.test("devaddons: " .. t.addon .. "'s toc lists it with BugSack's Development Tools", function()
+    T.test("devaddons: " .. t.addon .. " never references another addon", function()
+        local toc, src = read(dir .. t.addon .. ".toc"), read(dir .. t.file)
+        T.falsy(toc:find("Dependencies", 1, true) or toc:find("OptionalDeps", 1, true), "no other addon in its toc")
+        T.falsy(toc:find("Daylight", 1, true) or src:find("Daylight", 1, true), "nor Daylight UI anywhere")
+        T.falsy(src:find("DUI", 1, true), "nor its namespace")
+    end)
+
+    T.test("devaddons: " .. t.addon .. " is listed with BugSack's Development Tools", function()
         local toc = read(dir .. t.addon .. ".toc")
         T.truthy(toc:find("## Category: Development Tools", 1, true))
         T.truthy(toc:find("## Category-frFR: Outils de Développement", 1, true), "the same group in each language")
-        T.truthy(toc:find("## Dependencies: DaylightUI, " .. t.dep, 1, true), "loads after the module it reads")
+        T.truthy(toc:find("## SavedVariables: " .. t.sv, 1, true))
         T.truthy(toc:find("\n" .. t.file .. "\n", 1, true))
     end)
 end
-
-T.test("devaddons: none of the tools ships with Daylight UI", function()
-    for _, toc in ipairs({ "DaylightUI_Quests/DaylightUI_Quests.toc", "DaylightUI_Bags/DaylightUI_Bags.toc" }) do
-        local s = read(toc)
-        T.falsy(s:find("Debug.lua", 1, true) or s:find("MapPace.lua", 1, true), toc)
-    end
-end)
-
-T.test("devaddons: the reload helper is in the same Development Tools group", function()
-    T.truthy(read("tools/devreload/DaylightUI_DevReload/DaylightUI_DevReload.toc"):find("## Category: Development Tools", 1, true))
-end)

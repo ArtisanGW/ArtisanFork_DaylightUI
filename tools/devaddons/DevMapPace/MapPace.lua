@@ -1,31 +1,47 @@
--- Debug only, not for release. /dui mappace times every frame while the world
+-- Debug only, not for release. /listed mappace times every frame while the world
 -- map (with the quest log) opens and closes 3 times in 20 seconds, to find what
 -- makes it hitch. For each frame: its length, the time all addons and each
--- DaylightUI addon spent in it (C_AddOnProfiler), memory made, borders laid out,
--- and the time inside the Daylight functions that run on open (timed only while
--- the run lasts, put back after). Prints a summary per open and close, and keeps
--- the last runs in DaylightUIDB.mapPace, which the game saves on /reload.
---   /dui mappace          opens and closes the map itself (out of combat)
---   /dui mappace manual   you press M: open/close it 3 times in the 20 seconds
---   /dui mappace deep     automatic, and also times the game's own map steps
+-- loaded addon spent in it (C_AddOnProfiler) and memory made. Prints a summary
+-- per open and close, and keeps
+-- the last runs in DevMapPaceDB.mapPace, which the game saves on /reload.
+--   /listed mappace          opens and closes the map itself (out of combat)
+--   /listed mappace manual   you press M: open/close it 3 times in the 20 seconds
+--   /listed mappace deep     automatic, and also times the game's own map steps
 --                         (each map data provider, overlay and the game's quest
 --                         list), to see where the game's part of the hitch goes.
 --                         Runs twice in a row: with the game's quest pins on,
 --                         then with them off (the questPOI setting, put back
 --                         after, or at the next login if a reload cut the run
 --                         short)
---   /dui mappace clear    empties the saved runs
+--   /listed mappace clear    empties the saved runs
 -- The automatic run closes the map from addon code, and deep puts timers on the
--- game's map: every run ends with a Reload button (see reloadSoon), which writes
+-- game's map: every run ends asking for a /reload (see reloadSoon), which writes
 -- the results and clears the taint.
 
--- A separate dev addon (tools/devaddons, never shipped). It reaches the
--- Quests module's namespace through DaylightUI:GetModule, which is internal and
--- not promised to plugins: fine for a local tool, kept out of the release.
-local DUI = DaylightUI
-local mod = DUI and DUI.GetModule and DUI:GetModule("Quests")
-local ns = mod and mod.ns
-if type(ns) ~= "table" then return end
+-- A vanilla addon: it uses only the game, never another addon. Its own events,
+-- slash command (/mappace) and saved variables (DevMapPaceDB).
+local events, handlers = CreateFrame("Frame"), {}
+events:SetScript("OnEvent", function(_, event, ...)
+    for _, fn in ipairs(handlers[event]) do fn(event, ...) end
+end)
+local function on(event, fn)
+    if not handlers[event] then handlers[event] = {}; events:RegisterEvent(event) end
+    table.insert(handlers[event], fn)
+end
+-- Runs fn now, or once the fight is over.
+local function afterCombat(fn)
+    if not InCombatLockdown() then return fn() end
+    local done = false
+    on("PLAYER_REGEN_ENABLED", function() if not done then done = true; fn() end end)
+end
+local function store()
+    _G.DevMapPaceDB = type(_G.DevMapPaceDB) == "table" and _G.DevMapPaceDB or {}
+    return _G.DevMapPaceDB
+end
+local function command(fn)
+    _G["SLASH_DEVMAPPACE1"] = "/mappace"
+    SlashCmdList["DEVMAPPACE"] = function(msg) fn(msg or "") end
+end
 
 local Pace = {
     LENGTH = 20,          -- seconds per run
@@ -36,7 +52,6 @@ local Pace = {
     RUNS = 5,             -- runs kept in the saved variables
     MAX_HITCHES = 60,     -- frames kept in full per run
 }
-ns.MapPace = Pace
 
 local frame = CreateFrame("Frame")
 frame:Hide()
@@ -47,28 +62,16 @@ local calls = {}       -- "what" -> times called this frame
 local stacks = {}      -- "what" -> { [stack] = times }, for the functions asked to (deep)
 local undo = {}        -- functions to put back when the run ends
 
-local function report(text) print("Daylight UI mappace: " .. text) end
+local function report(text) print("mappace: " .. text) end
 
 -- The end of the runs: a reload writes the results to disk and clears the map's
--- taint. Addon code can't call ReloadUI on this client (only a click can), so
--- the runs end with the Daylight question box, whose Reload is a secure /reload
--- button: one click or press. In a fight the box waits for it to end. English
--- only, like the rest of this debug tool.
-Pace.ASK = "Map timing done. Reload now to save the results (and clear the map's taint)?"
+-- taint. Addon code can't call ReloadUI on this client, so it asks for /reload.
 local function reloadSoon()
-    report("saved, click Reload in the box to write the results")
-    local W, L = DUI.Widgets, DUI.L
-    if W and W.Ask then
-        W.Ask({ key = "mapPaceReload", text = Pace.ASK, reload = true,
-                yes = RELOADUI or L["Reload"], no = LATER or L["Later"] })
-    else
-        report("/reload to write the results")
-    end
+    report("saved: /reload to write the results (and clear the map's taint)")
 end
 
 local function db()
-    local root = _G.DaylightUIDB
-    if type(root) ~= "table" then return nil end
+    local root = store()
     root.mapPace = root.mapPace or { runs = {} }
     root.mapPace.runs = root.mapPace.runs or {}
     return root.mapPace
@@ -134,7 +137,7 @@ local function mixinName(o, key)
     return okName and type(n) == "string" and n or tostring(o):gsub("^table: ", "")
 end
 
--- The game's own map steps, for /dui mappace deep.
+-- The game's own map steps, for /listed mappace deep.
 local function wrapGame()
     local m = _G.WorldMapFrame
     if type(m) ~= "table" then return end
@@ -173,57 +176,22 @@ local function wrapGame()
     report(string.format("timing %d map providers, %d overlays", #providers, type(m.overlayFrames) == "table" and #m.overlayFrames or 0))
 end
 
-local function skinsNs()
-    local m = DUI.GetModule and DUI:GetModule("Skins")
-    return m and m.enabled and type(m.ns) == "table" and m.ns or nil
-end
 
-local restoreProfiling
-local function wrapAll()
-    local J = ns.Journal
-    if J then
-        for _, k in ipairs({ "Read", "Veil", "Arrive", "ShowList", "ShowQuest", "FillList", "FillQuest", "Refresh", "Light", "Spot" }) do
-            wrap(J, k, "journal." .. k)
-        end
-    end
-    if ns.Route then wrap(ns.Route, "Tick", "route.Tick") end
-    if ns.Bridge then wrap(ns.Bridge, "FocusIcons", "bridge.FocusIcons") end
-    local Feel = DUI.Win and DUI.Win.Feel
-    if Feel then wrap(Feel, "Stagger", "win.Stagger") end
-    local S = skinsNs()
-    if S then
-        if S.MapMove then wrap(S.MapMove, "Apply", "skins.MapMove.Apply") end
-        if S.MapPins then wrap(S.MapPins, "Draw", "skins.MapPins.Draw") end
-        if S.MapReveal then wrap(S.MapReveal, "Draw", "skins.MapReveal.Draw") end
-        -- The skins' own timers ("window worldmap", "walk", "rows"), read each
-        -- frame here; their chat profiler is kept quiet meanwhile.
-        local Kit, Engine = S.Kit, S.Engine
-        if Kit and Engine then
-            local was, watch = Kit.Profiling, Engine.ProfileWatch
-            Kit.Profiling = true
-            Engine.ProfileWatch = function() end
-            Kit.TakeSpent()
-            restoreProfiling = function()
-                Kit.Profiling = was
-                Engine.ProfileWatch = watch
-            end
-        end
-    end
-end
+-- Nothing of another addon is timed: deep times the game's own map steps (wrapGame).
+local function wrapAll() end
 
 local function unwrapAll()
     for i = #undo, 1, -1 do undo[i]() end
     undo = {}
-    if restoreProfiling then restoreProfiling(); restoreProfiling = nil end
 end
 
--- The DaylightUI addons, for the profiler.
+-- Every loaded addon, for the profiler.
 local function addonNames()
     local out = {}
     local n = C_AddOns and C_AddOns.GetNumAddOns and C_AddOns.GetNumAddOns() or 0
     for i = 1, n do
         local name = C_AddOns.GetAddOnInfo(i)
-        if type(name) == "string" and name:find("^DaylightUI") and (not C_AddOns.IsAddOnLoaded or C_AddOns.IsAddOnLoaded(name)) then out[#out + 1] = name end
+        if type(name) == "string" and (not C_AddOns.IsAddOnLoaded or C_AddOns.IsAddOnLoaded(name)) then out[#out + 1] = name end
     end
     return out
 end
@@ -243,25 +211,19 @@ local function sample(dt)
     if P then
         local ok, v = pcall(P.GetOverallMetric, M)
         s.addons = ok and type(v) == "number" and v or nil
-        local dui, per = 0, {}
+        local listed, per = 0, {}
         for _, name in ipairs(r.addons) do
             local ok2, w = pcall(P.GetAddOnMetric, name, M)
             if ok2 and type(w) == "number" and w > 0 then
-                dui = dui + w
+                listed = listed + w
                 per[name] = w
             end
         end
-        s.dui, s.per = dui, per
+        s.listed, s.per = listed, per
     end
     local kb = collectgarbage("count")
     s.kb = kb - r.kb
     r.kb = kb
-    local Style = DUI.Style
-    s.borders = Style and Style.TakeLayoutCount and Style.TakeLayoutCount() or nil
-    local S = skinsNs()
-    if S and S.Kit and S.Kit.TakeSpent then
-        for what, ms in pairs(S.Kit.TakeSpent()) do spent["kit." .. what] = (spent["kit." .. what] or 0) + ms end
-    end
     if next(spent) then
         s.spent = spent
         spent = {}
@@ -322,18 +284,18 @@ local function window(r, mark)
     for _, s in ipairs(r.frames) do
         if s.t >= mark.t and s.t < mark.t + Pace.AFTER then list[#list + 1] = s end
     end
-    local worst, total, addons, dui, kb = nil, 0, 0, 0, 0
+    local worst, total, addons, listed, kb = nil, 0, 0, 0, 0
     for _, s in ipairs(list) do
         if not worst or s.dt > worst.dt then worst = s end
         total = total + s.dt
         addons = addons + (s.addons or 0)
-        dui = dui + (s.dui or 0)
+        listed = listed + (s.listed or 0)
         kb = kb + math.max(0, s.kb or 0)
     end
     return {
         what = mark.what, t = mark.t, frames = #list,
-        worst = worst and worst.dt, worstAddons = worst and worst.addons, worstDui = worst and worst.dui,
-        addons = addons, dui = dui, kb = kb, top = topSpent(list, r.mode == "deep" and 10 or 5),
+        worst = worst and worst.dt, worstAddons = worst and worst.addons, worstListed = worst and worst.listed,
+        addons = addons, listed = listed, kb = kb, top = topSpent(list, r.mode == "deep" and 10 or 5),
         calls = r.mode == "deep" and topCalls(list) or nil,
     }
 end
@@ -368,8 +330,8 @@ local function finish()
         local w = window(r, mark)
         out.steps[#out.steps + 1] = w
         if w.calls and w.calls ~= "" then report(w.what .. " calls: " .. w.calls) end
-        report(string.format("%s at %.1fs: worst frame %sms (addons %s, DUI %s), next %ds: addons %sms, DUI %sms, %d KB made%s",
-            w.what, w.t, fmt(w.worst), fmt(w.worstAddons), fmt(w.worstDui), Pace.AFTER, fmt(w.addons), fmt(w.dui),
+        report(string.format("%s at %.1fs: worst frame %sms (all addons %s, each summed %s), next %ds: all addons %sms, each summed %sms, %d KB made%s",
+            w.what, w.t, fmt(w.worst), fmt(w.worstAddons), fmt(w.worstListed), Pace.AFTER, fmt(w.addons), fmt(w.listed),
             math.floor(w.kb), w.top ~= "" and (" | " .. w.top) or ""))
     end
     -- the worst frames in full, and every frame's length in short
@@ -439,7 +401,6 @@ function Pace.Start(mode, label, after)
     run = { mode = mode, auto = auto, label = label, after = after, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
             kb = collectgarbage("count"), addons = addonNames() }
     spent, calls, stacks = {}, {}, {}
-    if DUI.Style and DUI.Style.TakeLayoutCount then DUI.Style.TakeLayoutCount() end
     frame:Show()
     if not profiler() then report("the game's addon profiler is off: frame times only") end
     report(auto and string.format("running %ds%s, the map opens and closes 3 times", Pace.LENGTH, label and (" (" .. label .. ")") or "")
@@ -452,7 +413,7 @@ local function poiBack()
     local d = db()
     if d and d.poiWas ~= nil then
         if InCombatLockdown() then
-            DUI.AfterCombat(poiBack, "mappace:poi")
+            afterCombat(poiBack)
             return
         end
         if type(SetCVar) == "function" then pcall(SetCVar, "questPOI", d.poiWas) end
@@ -483,7 +444,7 @@ function Pace.Deep()
     end)
 end
 
-DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
+on("PLAYER_REGEN_DISABLED", function()
     if run and run.auto then
         run.after = function() poiBack(); reloadSoon() end
         report("combat: stopped")
@@ -492,7 +453,7 @@ DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
 end)
 
 -- A reload during the second run left the pins off.
-DUI.RegisterEvent("PLAYER_LOGIN", function() C_Timer.After(1, poiBack) end)
+on("PLAYER_LOGIN", function() C_Timer.After(1, poiBack) end)
 
 function Pace.Run(rest)
     rest = rest or ""
@@ -509,4 +470,4 @@ function Pace.Run(rest)
     end
 end
 
-DUI.RegisterCommand("mappace", Pace.Run)
+command(Pace.Run)
