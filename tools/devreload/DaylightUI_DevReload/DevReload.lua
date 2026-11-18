@@ -4,7 +4,7 @@
 -- (secure) /reload: this client refuses ReloadUI() from addon code, so a click on
 -- it is the one thing left to do.
 
-local KEY = "CTRL-ALT-SHIFT-F12"   -- tools/game_reload.sh presses the same keys
+local KEY = "CTRL-ALT-SHIFT-F9"    -- tools/game_reload.sh presses the same keys
 local BUTTON = "DaylightUIDevReloadButton"
 local TEXT = "A new Daylight UI build is in the AddOns folder. Reload to load it?"
 

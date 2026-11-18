@@ -17,7 +17,7 @@ ADDONS="$GAME/Interface/AddOns"
 NAME="DaylightUI_DevReload"
 SRC="$(cd "$(dirname "$0")" && pwd)/devreload/$NAME"
 DEST="$ADDONS/$NAME"
-KEYS="ctrl+alt+shift+F12"   # DevReload.lua's KEY
+KEYS="ctrl+alt+shift+F9"    # DevReload.lua's KEY (not F12: Steam takes it for screenshots)
 
 if [ ! -d "$ADDONS" ]; then
     echo "No AddOns folder at: $ADDONS" >&2
@@ -54,8 +54,8 @@ fi
 
 # Fallback: ydotool types into whatever has focus (needs ydotoold running).
 if command -v ydotool >/dev/null 2>&1; then
-    # ctrl 29, alt 56, shift 42, F12 88
-    if ydotool key 29:1 56:1 42:1 88:1 88:0 42:0 56:0 29:0 >/dev/null 2>&1; then
+    # ctrl 29, alt 56, shift 42, F9 67
+    if ydotool key 29:1 56:1 42:1 67:1 67:0 42:0 56:0 29:0 >/dev/null 2>&1; then
         echo "Asked the game to reload through ydotool (if WoW had focus)."
         exit 0
     fi

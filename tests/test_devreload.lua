@@ -28,6 +28,6 @@ end)
 
 T.test("devreload: the script presses the key the addon binds", function()
     local f = assert(io.open("tools/game_reload.sh")); local sh = f:read("*a"); f:close()
-    T.truthy(sh:find('KEYS="ctrl+alt+shift+F12"', 1, true))
-    T.eq(load().KEY, "CTRL-ALT-SHIFT-F12")
+    T.truthy(sh:find('KEYS="ctrl+alt+shift+F9"', 1, true))
+    T.eq(load().KEY, "CTRL-ALT-SHIFT-F9")
 end)
