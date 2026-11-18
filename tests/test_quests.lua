@@ -1532,6 +1532,20 @@ T.test("quests offers: a quest from an NPC, a hand-in pop-up or a quest in the l
     for key in pairs(Tr.frames) do T.falsy(key:match("^offer:"), key) end
 end)
 
+-- The list's rows can't be reached with a controller: the offer opens at once.
+T.test("quests offers: on a controller an item's quest opens at once, no row", function()
+    local Tr = tracker({ quests = { STEW }, titles = { [7] = "Chen's Empty Keg" } })
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    _G.GamepadMode = { FrameControlsManager = {} }
+    _G.GetQuestID = function() return 7 end
+    AddAutoQuestPopUp(7, "OFFER")
+    stub.FireEvent("QUEST_DETAIL", 12345); stub.RunTimers()
+    T.deq(QW.Calls("offer"), { 7 })
+    T.eq(GetNumAutoQuestPopUps(), 0)
+    T.isnil(Tr.frames["offer:7"])
+    _G.InputUtil, _G.GamepadMode, _G.GetQuestID = nil, nil, nil
+end)
+
 T.test("quests offers: accepting the quest takes its offer off the list", function()
     local Tr = tracker({ quests = {}, popups = { { 7, "OFFER" } }, titles = { [7] = "Chen's Empty Keg" } })
     T.truthy(Tr.frames["offer:7"])

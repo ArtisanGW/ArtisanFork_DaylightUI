@@ -77,6 +77,22 @@ end
 
 if B.ENABLED then B.Starve() end
 
+-- On a controller the list's rows can't be reached, so a quest an item started
+-- opens at once instead of waiting there (the game's quest window put it on the
+-- pop-up list and closed, Data.Offers): what clicking its pop-up does. This runs
+-- before the list looks (it registers first), so the row never flashes up.
+function B.OnDetail(item)
+    if not B.starved or type(item) ~= "number" or DUI.IsSecret(item) or item == 0 then return end
+    if not DUI.Pad.On() then return end
+    local id = type(GetQuestID) == "function" and GetQuestID()
+    if type(id) ~= "number" or DUI.IsSecret(id) or id == 0 then return end
+    C_Timer.After(0, function()
+        if type(ShowQuestOffer) == "function" then ShowQuestOffer(id) end
+        if type(RemoveAutoQuestPopUp) == "function" then RemoveAutoQuestPopUp(id) end
+    end)
+end
+DUI.RegisterEvent("QUEST_DETAIL", function(_, item) B.OnDetail(item) end)
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:SetScript("OnEvent", function() B.Mute() end)
