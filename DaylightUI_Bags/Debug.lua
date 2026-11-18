@@ -3,7 +3,9 @@
 -- and its bindingSetStack, SmartNavigation) for fields last written by an addon.
 -- Each newly tainted field is logged with who wrote it and the events just before
 -- it, and every refused action (ADDON_ACTION_FORBIDDEN / BLOCKED) logs a full
--- snapshot. Kept on across reloads until turned off. Written to
+-- snapshot. The game's "Interface action failed" chat message (no Lua error)
+-- is logged with the stack that printed it, and so is each show or hide of the
+-- game's navigation frame that an addon's code is on the stack of. Kept on across reloads until turned off. Written to
 -- DaylightUIDB.padTaint, which the game saves on /reload or logout.
 --   /dui padtaint        on / off
 --   /dui padtaint now    a snapshot now
@@ -12,12 +14,14 @@
 local _, ns = ...
 local DUI = DaylightUI
 
-local Debug = { EVERY = 0.5, MAX_LINES = 400, RECENT = 12 }
+local Debug = { EVERY = 0.5, MAX_LINES = 3000, RECENT = 12, STACK = 25 }
 ns.Debug = Debug
 
 local ticker
 local recent = {}       -- the last few events, oldest first
 local seen = {}         -- "label.key" -> who, as of the last scan
+local printed = 0       -- notes already written out (each one only once)
+local noted = 0
 
 local function db()
     local root = _G.DaylightUIDB
@@ -38,7 +42,8 @@ local function write(text)
 end
 
 local function note(text)
-    recent[#recent + 1] = stamp() .. " " .. text
+    noted = noted + 1
+    recent[#recent + 1] = { noted, stamp() .. " " .. text }
     while #recent > Debug.RECENT do table.remove(recent, 1) end
 end
 
@@ -86,7 +91,10 @@ local function shownList()
 end
 
 local function writeRecent()
-    for _, line in ipairs(recent) do write("    before: " .. line) end
+    for _, e in ipairs(recent) do
+        if e[1] > printed then write("    before: " .. e[2]) end
+    end
+    printed = noted
 end
 
 function Debug.Snapshot(why)
@@ -114,10 +122,53 @@ function Debug.Tick()
     seen = now
 end
 
+local function stackText()
+    local ok, text = pcall(debugstack, 3, Debug.STACK, 0)
+    return ok and type(text) == "string" and text or ""
+end
+
+local function writeStack(text)
+    for line in text:gmatch("[^\n]+") do write("    | " .. line) end
+end
+
+-- An addon's own file (not the game's, not this file) on the stack.
+local function addonOn(text)
+    for line in text:gmatch("[^\n]+") do
+        local name = line:match("AddOns[/\\]([^/\\]+)")
+        if name and not name:find("^Blizzard_") and not line:find("Debug%.lua") then return name end
+    end
+end
+
+local function navChange(what)
+    if not ticker then return end
+    local text = stackText()
+    local by = addonOn(text)
+    note("SmartNavigation " .. what .. (by and (" from " .. by) or ""))
+    if by then
+        write("SmartNavigation " .. what .. " with " .. by .. " on the stack  shown=" .. shownList())
+        writeRecent()
+        writeStack(text)
+    end
+end
+
 local hooked = false
 local function hookOnce()
     if hooked then return end
     hooked = true
+    if type(_G.DisplayInterfaceActionBlockedMessage) == "function" then
+        hooksecurefunc("DisplayInterfaceActionBlockedMessage", function()
+            if not ticker then return end
+            note("BLOCKED MESSAGE")
+            local text = stackText()
+            Debug.Snapshot("BLOCKED MESSAGE (Interface action failed)")
+            writeStack(text)
+        end)
+    end
+    local nav = _G.SmartNavigation
+    if type(nav) == "table" and nav.HookScript then
+        nav:HookScript("OnShow", function() navChange("OnShow") end)
+        nav:HookScript("OnHide", function() navChange("OnHide") end)
+    end
     for _, name in ipairs({ "OpenAllBags", "CloseAllBags", "ToggleAllBags", "ToggleBackpack" }) do
         if type(_G[name]) == "function" then hooksecurefunc(name, function() note(name .. "  shown=" .. shownList()) end) end
     end
