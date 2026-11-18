@@ -1,0 +1,321 @@
+-- Debug only, not for release. /dui mappace times every frame while the world
+-- map (with the quest log) opens and closes 3 times in 20 seconds, to find what
+-- makes it hitch. For each frame: its length, the time all addons and each
+-- DaylightUI addon spent in it (C_AddOnProfiler), memory made, borders laid out,
+-- and the time inside the Daylight functions that run on open (timed only while
+-- the run lasts, put back after). Prints a summary per open and close, and keeps
+-- the last runs in DaylightUIDB.mapPace, which the game saves on /reload.
+--   /dui mappace          opens and closes the map itself (out of combat)
+--   /dui mappace manual   you press M: open/close it 3 times in the 20 seconds
+--   /dui mappace clear    empties the saved runs
+-- The automatic run closes the map from addon code: /reload after it before
+-- playing, so nothing of the map is left tainted.
+
+local _, ns = ...
+local DUI = DaylightUI
+
+local Pace = {
+    LENGTH = 20,          -- seconds per run
+    -- seconds into the run: open, close, open, close, open, close
+    STEPS = { 1, 4, 7.5, 10.5, 14, 17 },
+    AFTER = 1,            -- seconds after an open or close that count towards it
+    HITCH = 25,           -- ms: frames longer than this are kept in full
+    RUNS = 5,             -- runs kept in the saved variables
+    MAX_HITCHES = 60,     -- frames kept in full per run
+}
+ns.MapPace = Pace
+
+local frame = CreateFrame("Frame")
+frame:Hide()
+Pace.frame = frame
+local run              -- the run in progress
+local spent = {}       -- "what" -> ms this frame, from the timed functions
+local undo = {}        -- functions to put back when the run ends
+
+local function report(text) print("Daylight UI mappace: " .. text) end
+
+local function db()
+    local root = _G.DaylightUIDB
+    if type(root) ~= "table" then return nil end
+    root.mapPace = root.mapPace or { runs = {} }
+    root.mapPace.runs = root.mapPace.runs or {}
+    return root.mapPace
+end
+
+local function now() return debugprofilestop() end
+
+local function mapShown()
+    local m = _G.WorldMapFrame
+    return type(m) == "table" and m:IsShown() == true
+end
+
+-- Timing a Daylight function: t[key] is replaced by a timed copy until the run
+-- ends. Errors pass through as they were; a nested call counts twice, fine here.
+local function wrap(t, key, label)
+    if type(t) ~= "table" or type(t[key]) ~= "function" then return end
+    local orig = t[key]
+    local function finish(t0, ok, ...)
+        spent[label] = (spent[label] or 0) + (now() - t0)
+        if not ok then error((...), 0) end
+        return ...
+    end
+    local function timed(...) return finish(now(), pcall(orig, ...)) end
+    t[key] = timed
+    undo[#undo + 1] = function() if t[key] == timed then t[key] = orig end end
+end
+
+local function skinsNs()
+    local m = DUI.GetModule and DUI:GetModule("Skins")
+    return m and m.enabled and type(m.ns) == "table" and m.ns or nil
+end
+
+local restoreProfiling
+local function wrapAll()
+    local J = ns.Journal
+    if J then
+        for _, k in ipairs({ "Read", "Veil", "Arrive", "ShowList", "ShowQuest", "FillList", "FillQuest", "Refresh", "Light", "Spot" }) do
+            wrap(J, k, "journal." .. k)
+        end
+    end
+    if ns.Route then wrap(ns.Route, "Tick", "route.Tick") end
+    if ns.Bridge then wrap(ns.Bridge, "FocusIcons", "bridge.FocusIcons") end
+    local Feel = DUI.Win and DUI.Win.Feel
+    if Feel then wrap(Feel, "Stagger", "win.Stagger") end
+    local S = skinsNs()
+    if S then
+        if S.MapMove then wrap(S.MapMove, "Apply", "skins.MapMove.Apply") end
+        if S.MapPins then wrap(S.MapPins, "Draw", "skins.MapPins.Draw") end
+        if S.MapReveal then wrap(S.MapReveal, "Draw", "skins.MapReveal.Draw") end
+        -- The skins' own timers ("window worldmap", "walk", "rows"), read each
+        -- frame here; their chat profiler is kept quiet meanwhile.
+        local Kit, Engine = S.Kit, S.Engine
+        if Kit and Engine then
+            local was, watch = Kit.Profiling, Engine.ProfileWatch
+            Kit.Profiling = true
+            Engine.ProfileWatch = function() end
+            Kit.TakeSpent()
+            restoreProfiling = function()
+                Kit.Profiling = was
+                Engine.ProfileWatch = watch
+            end
+        end
+    end
+end
+
+local function unwrapAll()
+    for i = #undo, 1, -1 do undo[i]() end
+    undo = {}
+    if restoreProfiling then restoreProfiling(); restoreProfiling = nil end
+end
+
+-- The DaylightUI addons, for the profiler.
+local function addonNames()
+    local out = {}
+    local n = C_AddOns and C_AddOns.GetNumAddOns and C_AddOns.GetNumAddOns() or 0
+    for i = 1, n do
+        local name = C_AddOns.GetAddOnInfo(i)
+        if type(name) == "string" and name:find("^DaylightUI") and (not C_AddOns.IsAddOnLoaded or C_AddOns.IsAddOnLoaded(name)) then out[#out + 1] = name end
+    end
+    return out
+end
+
+local function profiler()
+    local P, E = _G.C_AddOnProfiler, Enum and Enum.AddOnProfilerMetric
+    if not (P and E and P.GetAddOnMetric and E.LastTime) then return nil end
+    if P.IsEnabled and not P.IsEnabled() then return nil end
+    return P, E.LastTime
+end
+
+-- Everything known about the frame that just ended.
+local function sample(dt)
+    local r = run
+    local s = { t = (now() - r.start) / 1000, dt = dt, map = mapShown() }
+    local P, M = profiler()
+    if P then
+        local ok, v = pcall(P.GetOverallMetric, M)
+        s.addons = ok and type(v) == "number" and v or nil
+        local dui, per = 0, {}
+        for _, name in ipairs(r.addons) do
+            local ok2, w = pcall(P.GetAddOnMetric, name, M)
+            if ok2 and type(w) == "number" and w > 0 then
+                dui = dui + w
+                per[name] = w
+            end
+        end
+        s.dui, s.per = dui, per
+    end
+    local kb = collectgarbage("count")
+    s.kb = kb - r.kb
+    r.kb = kb
+    local Style = DUI.Style
+    s.borders = Style and Style.TakeLayoutCount and Style.TakeLayoutCount() or nil
+    local S = skinsNs()
+    if S and S.Kit and S.Kit.TakeSpent then
+        for what, ms in pairs(S.Kit.TakeSpent()) do spent["kit." .. what] = (spent["kit." .. what] or 0) + ms end
+    end
+    if next(spent) then
+        s.spent = spent
+        spent = {}
+    end
+    return s
+end
+
+local function act(i)
+    if InCombatLockdown() then return end
+    if i % 2 == 1 then
+        if C_Map and C_Map.OpenWorldMap then pcall(C_Map.OpenWorldMap) end
+    elseif mapShown() then
+        if type(HideUIPanel) == "function" then pcall(HideUIPanel, _G.WorldMapFrame)
+        else pcall(_G.WorldMapFrame.Hide, _G.WorldMapFrame) end
+    end
+end
+
+local function fmt(n) return n and string.format("%.1f", n) or "-" end
+
+local function topSpent(list, n)
+    local sum = {}
+    for _, s in ipairs(list) do
+        for what, ms in pairs(s.spent or {}) do sum[what] = (sum[what] or 0) + ms end
+    end
+    local keys = {}
+    for k in pairs(sum) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return sum[a] > sum[b] end)
+    local parts = {}
+    for i = 1, math.min(n, #keys) do parts[i] = string.format("%s %.1f", keys[i], sum[keys[i]]) end
+    return table.concat(parts, ", ")
+end
+
+-- A summary of the frames from an open or close up to Pace.AFTER seconds later.
+local function window(r, mark)
+    local list = {}
+    for _, s in ipairs(r.frames) do
+        if s.t >= mark.t and s.t < mark.t + Pace.AFTER then list[#list + 1] = s end
+    end
+    local worst, total, addons, dui, kb = nil, 0, 0, 0, 0
+    for _, s in ipairs(list) do
+        if not worst or s.dt > worst.dt then worst = s end
+        total = total + s.dt
+        addons = addons + (s.addons or 0)
+        dui = dui + (s.dui or 0)
+        kb = kb + math.max(0, s.kb or 0)
+    end
+    return {
+        what = mark.what, t = mark.t, frames = #list,
+        worst = worst and worst.dt, worstAddons = worst and worst.addons, worstDui = worst and worst.dui,
+        addons = addons, dui = dui, kb = kb, top = topSpent(list, 5),
+    }
+end
+
+local function percentile(sorted, p)
+    if #sorted == 0 then return nil end
+    return sorted[math.max(1, math.ceil(#sorted * p))]
+end
+
+local function finish()
+    local r = run
+    run = nil
+    frame:Hide()
+    unwrapAll()
+    local dts = {}
+    for i, s in ipairs(r.frames) do dts[i] = s.dt end
+    table.sort(dts)
+    local out = {
+        when = date("%Y-%m-%d %H:%M:%S"), mode = r.mode, frames = #r.frames,
+        median = percentile(dts, 0.5), p95 = percentile(dts, 0.95), p99 = percentile(dts, 0.99),
+        max = dts[#dts], over33 = 0, over50 = 0, profiler = profiler() ~= nil,
+        steps = {}, hitches = {}, dt = {},
+    }
+    for _, d in ipairs(dts) do
+        if d > 33.4 then out.over33 = out.over33 + 1 end
+        if d > 50 then out.over50 = out.over50 + 1 end
+    end
+    report(string.format("%d frames, median %sms, p95 %sms, p99 %sms, worst %sms, >33ms %d, >50ms %d%s",
+        out.frames, fmt(out.median), fmt(out.p95), fmt(out.p99), fmt(out.max), out.over33, out.over50,
+        out.profiler and "" or " (addon profiler off: no addon times)"))
+    for _, mark in ipairs(r.marks) do
+        local w = window(r, mark)
+        out.steps[#out.steps + 1] = w
+        report(string.format("%s at %.1fs: worst frame %sms (addons %s, DUI %s), next %ds: addons %sms, DUI %sms, %d KB made%s",
+            w.what, w.t, fmt(w.worst), fmt(w.worstAddons), fmt(w.worstDui), Pace.AFTER, fmt(w.addons), fmt(w.dui),
+            math.floor(w.kb), w.top ~= "" and (" | " .. w.top) or ""))
+    end
+    -- the worst frames in full, and every frame's length in short
+    local byLength = {}
+    for _, s in ipairs(r.frames) do if s.dt > Pace.HITCH then byLength[#byLength + 1] = s end end
+    table.sort(byLength, function(a, b) return a.dt > b.dt end)
+    for i = 1, math.min(Pace.MAX_HITCHES, #byLength) do out.hitches[i] = byLength[i] end
+    table.sort(out.hitches, function(a, b) return a.t < b.t end)
+    local parts = {}
+    for i, s in ipairs(r.frames) do parts[i] = string.format("%.1f", s.dt) end
+    out.dt = table.concat(parts, ",")
+    local d = db()
+    if d then
+        table.insert(d.runs, 1, out)
+        while #d.runs > Pace.RUNS do table.remove(d.runs) end
+        report(r.mode == "auto" and "saved, /reload to write it (and to clear the map's taint)" or "saved, /reload to write it")
+    end
+end
+
+frame:SetScript("OnUpdate", function()
+    local r = run
+    if not r then frame:Hide(); return end
+    local t = now()
+    local dt = t - r.last
+    r.last = t
+    r.frames[#r.frames + 1] = sample(dt)
+    local at = (t - r.start) / 1000
+    if r.mode == "auto" then
+        local nextStep = Pace.STEPS[r.step + 1]
+        if nextStep and at >= nextStep then
+            r.step = r.step + 1
+            act(r.step)
+        end
+    end
+    local shown = mapShown()
+    if shown ~= r.shown then
+        r.shown = shown
+        r.marks[#r.marks + 1] = { what = shown and "open" or "close", t = at }
+    end
+    if at >= Pace.LENGTH then finish() end
+end)
+
+function Pace.Start(mode)
+    if run then report("already running"); return end
+    if mode == "auto" and InCombatLockdown() then report("not in combat"); return end
+    if mode == "auto" and mapShown() then
+        report("close the map first")
+        return
+    end
+    wrapAll()
+    local t = now()
+    run = { mode = mode, start = t, last = t, step = 0, frames = {}, marks = {}, shown = mapShown(),
+            kb = collectgarbage("count"), addons = addonNames() }
+    spent = {}
+    if DUI.Style and DUI.Style.TakeLayoutCount then DUI.Style.TakeLayoutCount() end
+    frame:Show()
+    if not profiler() then report("the game's addon profiler is off: frame times only") end
+    report(mode == "auto" and string.format("running %ds, the map opens and closes 3 times", Pace.LENGTH)
+        or string.format("running %ds: open and close the map (M) 3 times", Pace.LENGTH))
+end
+
+DUI.RegisterEvent("PLAYER_REGEN_DISABLED", function()
+    if run and run.mode == "auto" then
+        report("combat: stopped")
+        finish()
+    end
+end)
+
+function Pace.Run(rest)
+    rest = rest or ""
+    if rest == "clear" then
+        local d = db()
+        if d then d.runs = {} end
+        report("saved runs cleared")
+    elseif rest == "manual" then
+        Pace.Start("manual")
+    else
+        Pace.Start("auto")
+    end
+end
+
+DUI.RegisterCommand("mappace", Pace.Run)
