@@ -1,8 +1,8 @@
 local stub = require("stub")   -- T (test helpers) is a global set by tests/run.lua
 
--- The local dev reload helper (tools/devreload, never shipped): tools/game_reload.sh
--- presses its key after a new build is copied into the game, and Daylight UI's
--- question box asks to reload, its Reload a real secure /reload.
+-- The local dev reload helper (tools/devreload, never shipped, needs no other
+-- addon): tools/game_reload.sh presses its key after a new build is copied into
+-- the game, and the key clicks a secure macro button that runs /reload.
 
 local function load()
     stub.Load()
@@ -12,18 +12,21 @@ local function load()
     return DaylightUIDevReload
 end
 
-T.test("devreload: its key clicks its button, and the click asks to reload", function()
+T.test("devreload: its key clicks a secure button whose macro is /reload", function()
     local Dev = load()
     local o = stub.overrides[Dev.KEY]
     T.truthy(o, "the key is bound")
     T.eq(o.click, "DaylightUIDevReloadButton")
-    local W, real, asked = DaylightUI.Widgets, DaylightUI.Widgets.Ask, nil
-    W.Ask = function(spec) asked = spec end
-    _G[o.click]:Click()
-    W.Ask = real
-    T.truthy(asked, "asked")
-    T.eq(asked.reload, true, "a secure Reload button")
-    T.eq(asked.text, Dev.TEXT)
+    local b = _G[o.click]
+    T.eq(b:GetAttribute("type"), "macro")
+    T.eq(b:GetAttribute("macrotext"), "/reload")
+end)
+
+T.test("devreload: it needs no other addon", function()
+    local f = assert(io.open("tools/devreload/DaylightUI_DevReload/DaylightUI_DevReload.toc")); local toc = f:read("*a"); f:close()
+    T.falsy(toc:find("Dependencies", 1, true))
+    f = assert(io.open("tools/devreload/DaylightUI_DevReload/DevReload.lua")); local src = f:read("*a"); f:close()
+    T.falsy(src:find("DaylightUI%.") or src:find("DaylightUI%s*$"), "never reaches into Daylight UI")
 end)
 
 T.test("devreload: the script presses the key the addon binds", function()

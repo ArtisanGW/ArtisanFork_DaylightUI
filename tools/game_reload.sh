@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Run after copying a new build into the game's AddOns folder (and after the
 # tests pass). Installs the dev reload addon (tools/devreload) if it's missing
-# or out of date, then presses its key in the running game, so Daylight UI asks
-# "Reload?" with a one-click Reload button. The game refuses ReloadUI() from
-# addon code, so that click stays yours.
+# or out of date, then presses its key in the running game. The key clicks the
+# addon's secure /reload button, so the game reloads at once. The addon needs no
+# other addon (the game refuses ReloadUI() from addon code, a macro is fine).
 #
 #   tools/game_reload.sh            install if needed, then ask the game
 #   DAYLIGHT_GAME=/path/_forever_   another game folder
 #
 # Exit codes: 0 asked, 2 the game isn't running or its window can't be found,
-# 3 the addon was just installed (one /reload by hand loads it the first time).
+# 3 the addon was just installed or updated (one /reload by hand loads it).
 
 set -u
 GAME="${DAYLIGHT_GAME:-/var/mnt/data/Jeux - Installations/World of Warcraft/_forever_}"
@@ -30,7 +30,7 @@ mkdir -p "$DEST"
 for f in "$SRC"/*; do
     base="$(basename "$f")"
     if [ ! -f "$DEST/$base" ]; then fresh=1; fi
-    if ! cmp -s "$f" "$DEST/$base"; then cp "$f" "$DEST/$base"; echo "installed $NAME/$base"; fi
+    if ! cmp -s "$f" "$DEST/$base"; then cp "$f" "$DEST/$base"; fresh=1; echo "installed $NAME/$base"; fi
 done
 
 win="$(xdotool search --name '^World of Warcraft$' 2>/dev/null | head -n 1)"
@@ -41,14 +41,14 @@ if [ -z "$win" ]; then
 fi
 
 if [ "$fresh" = 1 ]; then
-    echo "$NAME was just installed: /reload once by hand to load it; after that this asks for you."
+    echo "$NAME was just installed or updated: /reload once by hand to load it; after that this reloads for you."
     exit 3
 fi
 
 # Bring the game forward and press the keys. Wine ignores keys sent to a window
 # that isn't focused, hence the activate first.
 if xdotool windowactivate --sync "$win" 2>/dev/null && sleep 0.3 && xdotool key --clearmodifiers "$KEYS"; then
-    echo "Asked the game to reload (Daylight's Reload box is up)."
+    echo "Pressed the reload key in the game."
     exit 0
 fi
 
@@ -56,7 +56,7 @@ fi
 if command -v ydotool >/dev/null 2>&1; then
     # ctrl 29, alt 56, shift 42, F9 67
     if ydotool key 29:1 56:1 42:1 67:1 67:0 42:0 56:0 29:0 >/dev/null 2>&1; then
-        echo "Asked the game to reload through ydotool (if WoW had focus)."
+        echo "Pressed the reload key through ydotool (if WoW had focus)."
         exit 0
     fi
 fi

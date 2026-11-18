@@ -1,8 +1,7 @@
 ## Interface: 16001
 ## Title: DaylightUI Dev Reload
-## Notes: Local dev helper, never shipped: tools/game_reload.sh asks for a reload after a new build is copied in.
+## Notes: Local dev helper, never shipped: tools/game_reload.sh reloads the game after a new build is copied in. Needs no other addon.
 ## Author: local
 ## Version: dev
-## Dependencies: DaylightUI
 
 DevReload.lua
