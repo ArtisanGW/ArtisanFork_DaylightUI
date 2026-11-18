@@ -61,10 +61,38 @@ local function sources()
     }
 end
 
+-- What the world map's close runs through (its OnHide walks its data providers
+-- and pins, the panel manager reads its own fields). Scanned in snapshots only,
+-- since addons write some of these on purpose.
+local function mapSources()
+    local map = _G.WorldMapFrame
+    local cb = type(_G.EventRegistry) == "table" and _G.EventRegistry.callbackTables
+    local out = {
+        { "FramePositionDelegate", _G.FramePositionDelegate },
+        { "UIPanelWindows", _G.UIPanelWindows },
+        { "WorldMapFrame", map },
+    }
+    if type(map) == "table" then
+        out[#out + 1] = { "WorldMapFrame.dataProviders", map.dataProviders }
+        out[#out + 1] = { "WorldMapFrame.ScrollContainer", map.ScrollContainer }
+        out[#out + 1] = { "WorldMapFrame.pinPools", map.pinPools }
+    end
+    if type(cb) == "table" then
+        for kind, t in pairs(cb) do
+            if type(t) == "table" then
+                for _, event in ipairs({ "WorldMapOnHide", "UIParentPanelManager.HideUIPanel", "ContainerFrame.CloseAllBags" }) do
+                    out[#out + 1] = { "EventRegistry." .. tostring(kind) .. "." .. event, t[event] }
+                end
+            end
+        end
+    end
+    return out
+end
+
 -- Every field of those tables last written by an addon: "label.key" -> who.
-local function scan()
+local function scan(list)
     local out = {}
-    for _, s in ipairs(sources()) do
+    for _, s in ipairs(list or sources()) do
         local label, t = s[1], s[2]
         if type(t) == "table" then
             pcall(function()
@@ -105,6 +133,16 @@ function Debug.Snapshot(why)
     table.sort(keys)
     for _, k in ipairs(keys) do write("    tainted " .. k .. " by " .. now[k]) end
     if #keys == 0 then write("    nothing tainted") end
+    local map = scan(mapSources())
+    local mk, by = {}, {}
+    for k in pairs(map) do mk[#mk + 1] = k end
+    table.sort(mk)
+    for _, k in ipairs(mk) do
+        local who = map[k]
+        by[who] = (by[who] or 0) + 1
+        if not k:find("^WorldMapFrame%.[^.]*$") then write("    map: " .. k .. " by " .. who) end
+    end
+    for who, n in pairs(by) do write("    map fields by " .. who .. ": " .. n) end
     writeRecent()
 end
 
