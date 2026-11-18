@@ -68,6 +68,27 @@ confirm() {
     exit 4
 }
 
+# On KDE Wayland, KWin refuses xdotool's activate while a Wayland window (the
+# terminal this runs from) has focus, and the keys then go nowhere. A KWin
+# script, loaded over D-Bus, may focus a window: it raises the game first.
+kwin_focus() {
+    local qdbus js id
+    qdbus="$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus)" || return 1
+    js="$(mktemp --suffix=.js)"
+    cat > "$js" <<'JS'
+for (const w of workspace.windowList()) {
+    if (w.caption === "World of Warcraft") { workspace.activeWindow = w; break; }
+}
+JS
+    "$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript game-reload-focus >/dev/null 2>&1
+    id="$("$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "$js" game-reload-focus 2>/dev/null)"
+    [ -n "$id" ] && "$qdbus" org.kde.KWin "/Scripting/Script$id" org.kde.kwin.Script.run >/dev/null 2>&1
+    sleep 0.3
+    "$qdbus" org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript game-reload-focus >/dev/null 2>&1
+    rm -f "$js"
+}
+kwin_focus
+
 # Bring the game forward and press the keys. Wine ignores keys sent to a window
 # that isn't focused, hence the activate first. A text box with the cursor (chat,
 # the Send Mail fields) takes every key, so key bindings don't fire: Escape first
