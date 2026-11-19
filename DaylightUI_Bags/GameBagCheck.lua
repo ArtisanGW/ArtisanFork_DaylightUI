@@ -32,6 +32,8 @@ local function isOurs(path)
     return type(path) == "string" and path:find("DaylightUI", 1, true) ~= nil
 end
 
+local WHITE_TEXTURE = 130871   -- Interface\Buttons\WHITE8X8
+
 local function regionName(region)
     if region.GetDebugName then
         local ok, name = pcall(region.GetDebugName, region)
@@ -53,7 +55,9 @@ local function describeLeftover(region)
     if objectType == "Texture" then
         local atlas = region.GetAtlas and region:GetAtlas()
         local texture = region.GetTexture and region:GetTexture()
-        if isOurs(texture) then return nil end
+        -- Files loaded at run time (Daylight UI's media) have negative ids; 130871
+        -- is the plain white texture behind Daylight UI's color fills.
+        if isOurs(texture) or (type(texture) == "number" and texture < 0) or texture == WHITE_TEXTURE then return nil end
         if atlas then return "atlas " .. atlas end
         if texture ~= nil and texture ~= 0 then return "texture " .. tostring(texture) end
     elseif objectType == "FontString" then

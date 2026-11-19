@@ -4737,6 +4737,45 @@ T.test("skins: the game's bag, already left to the game when the skins start, is
     DaylightUI.BagsUseGameBag = nil
 end)
 
+T.test("skins: the game's bag on a controller: its count after the title, the money and bag buttons in our look, our hover", function()
+    login(function()
+        local bagFrame = gameBag()
+        bagFrame.CountContainer = CreateFrame("Frame", nil, bagFrame)
+        bagFrame.CountContainer.Count = bagFrame.CountContainer:CreateFontString()
+        bagFrame.CountContainer.Count:SetText("(20)")
+        local money = CreateFrame("Frame", "ContainerFrameCombinedBagsMoneyFrame", bagFrame)
+        money.Border = CreateFrame("Frame", nil, money)
+        for _, piece in ipairs({ "Left", "Right", "Middle" }) do money.Border[piece] = money.Border:CreateTexture() end
+        money.GoldButton = CreateFrame("Button", "ContainerFrameCombinedBagsGoldButton", money)
+        _G.ContainerFrameCombinedBagsGoldButtonText = money.GoldButton:CreateFontString()
+        bagFrame.MoneyFrame = money
+        local backpack = CreateFrame("Button", "GamepadBackpackButton", bagFrame)
+        _G.GamepadBackpackButtonCount = backpack:CreateFontString()
+        local hover = backpack:CreateTexture()
+        function backpack:GetHighlightTexture() return hover end
+    end)
+    local bagFrame = ContainerFrameCombinedBags
+    DaylightUI.BagsUseGameBag = function() return true end
+    DaylightUI.Fire("GameWindowBack", "bags", "bags", bagFrame)
+    stub.RunTimers()
+    bagFrame:Show()
+    stub.RunTimers()
+    local font = DaylightUI.Style.FONT
+    local count = bagFrame.CountContainer.Count
+    T.eq(count.__font[1], font, "the free count in our font")
+    local _, relativeTo = count:GetPoint(1)
+    T.eq(relativeTo, bagFrame.TitleContainer.TitleText, "just after the title, not over it")
+    for _, piece in ipairs({ "Left", "Right", "Middle" }) do
+        T.eq(bagFrame.MoneyFrame.Border[piece]:GetAlpha(), 0, "the game's coin box (" .. piece .. ") gone")
+    end
+    T.eq(ContainerFrameCombinedBagsGoldButtonText.__font[1], font, "the gold in our font")
+    T.eq(GamepadBackpackButtonCount.__font[1], font, "the backpack button's count in our font")
+    T.eq(GamepadBackpackButton:GetHighlightTexture():GetAlpha(), 0, "the game's hover art gone, our wash instead")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag = nil
+    _G.GamepadBackpackButton, _G.GamepadBackpackButtonCount, _G.ContainerFrameCombinedBagsGoldButtonText = nil, nil, nil
+end)
+
 T.test("skins: the game's bag isn't dressed while Daylight UI's bag stands in for it", function()
     login(function() gameBag() end)
     DaylightUI.BagsUseGameBag = function() return false end
