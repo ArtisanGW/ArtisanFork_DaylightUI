@@ -8459,7 +8459,7 @@ T.test("bags, /dui bagcheck: runs on its own, puts the settings back, saves its 
     local passed = {}
     for _, result in ipairs(saved.results) do passed[result.name] = result.passed end
     for _, name in ipairs({ "Controller: the game's bag is right under it", "off: the game's bag is parked",
-        "on: the game's bag is under UIParent", "Daylight's bag stayed shut", "off again: Daylight's bag opens",
+        "on: the game's bag is under UIParent", "Daylight's bag stayed shut", "off again: the game's bag is parked",
         "Replace off turns the switch off" }) do
         T.eq(passed[name], true, name)
     end

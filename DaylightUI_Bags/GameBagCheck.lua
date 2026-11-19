@@ -140,6 +140,12 @@ local function checkLook(bagFrame)
     record("none of the game's art left on the bag", #running.leftovers == 0, #running.leftovers .. " pieces (listed in the results)")
 end
 
+-- Closes the game's bag, only while it's the one in use (see the steps' note on
+-- Daylight's own bag).
+local function closeGameBag()
+    if ns.OpenClose.GameBagMode() and type(CloseAllBags) == "function" then CloseAllBags() end
+end
+
 local function setSwitch(value)
     DUI:Set("Bags", "padGameBag", value)
 end
@@ -153,7 +159,7 @@ local function buildSteps()
             local items = ns.OPTIONS.pages[1].groups[1].items
             record("Replace the game's bags is the first row", items[1].key == "enabled")
             record("Controller: the game's bag is right under it", items[2].key == "padGameBag")
-            if type(CloseAllBags) == "function" then CloseAllBags() end
+            closeGameBag()
             setSwitch(false)
         end },
         { label = "switch off", run = function()
@@ -178,17 +184,17 @@ local function buildSteps()
                 end
             end)
         end },
-        { label = "switch off with the bag open", run = function()
-            if type(CloseAllBags) == "function" then CloseAllBags() end
+        -- Daylight's own bag isn't opened or closed from here: called from addon
+        -- code, OpenAllBags and CloseAllBags run its controller listing tainted,
+        -- and the game then refuses its own SetPreferredGamepadInteractTarget
+        -- until a reload (seen in the second run). The tests cover that bag.
+        { label = "switch off", run = function()
+            closeGameBag()
             setSwitch(false)
         end },
-        { label = "Daylight's bag back", run = function()
+        { label = "the game's bag parked", run = function()
             record("off again: the game's bag is parked", bagFrame:GetParent() == OC.hidden)
-            OpenAllBags()
-        end },
-        { label = "Daylight's bag open", run = function()
-            record("off again: Daylight's bag opens", ns.window ~= nil and ns.window:IsShown())
-            if type(CloseAllBags) == "function" then CloseAllBags() end
+            record("off again: the game's bag mode is off", OC.GameBagMode() == false)
             setSwitch(true)
             DUI:Set("Bags", "enabled", false)
         end },
@@ -232,7 +238,7 @@ local function finish(reason)
     local run = running
     running = nil
     -- Put every setting back as it was.
-    if type(CloseAllBags) == "function" then CloseAllBags() end
+    closeGameBag()
     DUI:Set("Bags", "enabled", run.before.enabled)
     DUI:Set("Bags", "padGameBag", run.before.padGameBag)
     local failed = 0
