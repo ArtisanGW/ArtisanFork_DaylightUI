@@ -396,8 +396,11 @@ function Items.Hover(btn, on, snap)
     end)
 end
 
--- Restyles a new button (once).
-function Items.Dress(btn)
+-- The slot look alone, with no hooks: ring, well, shade, overlays, highlight
+-- and pressed shading, laid out (Items.Place). Items.Dress adds this bag's own
+-- hooks on top. The game's own bag on a controller ("Controller: the game's
+-- bag", OpenClose.lua) takes only this, so its buttons stay the game's.
+function Items.DressLook(btn)
     if dressed[btn] then return dressed[btn] end
     local p = {}
     dressed[btn] = p
@@ -484,6 +487,15 @@ function Items.Dress(btn)
     if hl then hl:SetColorTexture(1, 1, 1, 0.12) end
     local pushed = btn.GetPushedTexture and btn:GetPushedTexture()
     if pushed then pushed:SetColorTexture(0, 0, 0, 0.3) end
+    Items.Place(btn)
+    return p
+end
+
+-- Restyles a new button of this bag (once): the look, then this bag's hooks.
+function Items.Dress(btn)
+    local p = Items.DressLook(btn)
+    if p.hooked then return p end
+    p.hooked = true
     -- Alt-right-click picks this item's group (the game does nothing with that
     -- click on a bag item).
     btn:HookScript("OnClick", function(self, button)
@@ -521,9 +533,22 @@ function Items.Dress(btn)
     -- A split made while trade, mail or the auction house is open gets put down in
     -- a free bag slot (Stack.AfterSplit).
     if ns.Stack then ns.Stack.Hook(btn) end
-    Items.Place(btn)
     return p
 end
+
+-- One of the game's own item buttons (its bag on a controller) in this bag's slot
+-- look, painted from the game's container data: dressed once, repainted on each
+-- call. Look only: no hooks, so clicks, use and the D-pad stay the game's.
+function Items.DressGameSlot(itemButton)
+    if type(itemButton) ~= "table" or not itemButton.CreateTexture then return nil end
+    local parts = Items.DressLook(itemButton)
+    local bag = itemButton.GetBagID and itemButton:GetBagID()
+    local slot = itemButton.GetID and itemButton:GetID()
+    local info = type(bag) == "number" and type(slot) == "number" and C_Container.GetContainerItemInfo(bag, slot) or nil
+    Items.Paint(itemButton, info ~= nil, info and info.quality, info and info.itemID, bag)
+    return parts
+end
+DUI.BagsSlotLook = function(itemButton) return Items.DressGameSlot(itemButton) end
 
 -- With compareItems off, a bag item's tooltip stands alone: the game's slot
 -- has just shown the worn item beside it (its "always compare" setting), so

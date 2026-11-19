@@ -8502,6 +8502,29 @@ T.test("bags, /dui bagcheck: without the controller UI it says so and doesn't st
     T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "nothing changed")
 end)
 
+T.test("bags, the game's bag: its item buttons take this bag's slot look, painted from the game's data, with no hooks", function()
+    local ns = login()
+    local function gameSlot(bag, slot)
+        local itemButton = CreateFrame("Button", nil, UIParent, "ContainerFrameItemButtonTemplate")
+        itemButton:SetSize(37, 37)
+        itemButton.icon = itemButton.icon or itemButton:CreateTexture()
+        function itemButton:GetBagID() return bag end
+        itemButton:SetID(slot)
+        return itemButton
+    end
+    local filled, empty = gameSlot(0, 6), gameSlot(0, 9)   -- 0:6 holds a green item, 0:9 nothing
+    local parts = DaylightUI.BagsSlotLook(filled)
+    T.truthy(parts and parts.shell, "our slot ring")
+    T.eq(parts, ns.Items.Parts(filled), "known as one of ours for the check")
+    T.eq(parts.color, ns.Items.QualityColor(2), "ringed in its quality's color")
+    T.falsy(parts.well:IsShown(), "no empty well under an item")
+    local emptyParts = DaylightUI.BagsSlotLook(empty)
+    T.truthy(emptyParts.well:IsShown(), "an empty slot shows our well")
+    T.falsy(rawget(filled, "__hookParts"), "no script hooked (enter, click, hide...): the button stays the game's")
+    T.eq(DaylightUI.BagsSlotLook(filled), parts, "dressed once, repainted on each call")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)
+
 T.test("bags options: 'Controller: the game's bag' sits just under Replace the game's bags", function()
     local ns = login()
     local items = ns.OPTIONS.pages[1].groups[1].items

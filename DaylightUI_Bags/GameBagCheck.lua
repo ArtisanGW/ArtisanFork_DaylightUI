@@ -107,15 +107,17 @@ local function checkItems(bagFrame)
     record("the bag has item buttons", #list > 0, #list .. " buttons")
     local undressed, framed, pushed, bagPicture, cursor = 0, 0, 0, 0, 0
     for _, itemButton in ipairs(list) do
-        if not (Kit and Kit.ShellOf(itemButton)) then undressed = undressed + 1 end
+        if not (ns.Items.Parts(itemButton) or (Kit and Kit.ShellOf(itemButton))) then undressed = undressed + 1 end
         if itemButton.GetNormalTexture and not hidden(itemButton:GetNormalTexture()) then framed = framed + 1 end
-        if itemButton.GetPushedTexture and itemButton:GetPushedTexture() and itemButton:GetPushedTexture():GetAlpha() > 0.01 then
+        -- The controller's pressed art is an atlas; Daylight's pressed shading is a plain color.
+        local pushedTexture = itemButton.GetPushedTexture and itemButton:GetPushedTexture()
+        if pushedTexture and pushedTexture:GetAlpha() > 0.01 and pushedTexture.GetAtlas and pushedTexture:GetAtlas() then
             pushed = pushed + 1
         end
         if itemButton.EmptyBagIcon and not hidden(itemButton.EmptyBagIcon) then bagPicture = bagPicture + 1 end
         if itemButton.Highlight then cursor = cursor + 1 end
     end
-    record("every item wears the Daylight item look", undressed == 0, undressed .. " not dressed")
+    record("every item wears the Daylight bag slot look", undressed == 0, undressed .. " not dressed")
     record("no item shows the controller's slot frame (normal art)", framed == 0, framed .. " framed")
     record("no item has the controller's pressed art", pushed == 0, pushed .. " with it")
     record("no empty slot shows the gray bag picture", bagPicture == 0, bagPicture .. " showing it")

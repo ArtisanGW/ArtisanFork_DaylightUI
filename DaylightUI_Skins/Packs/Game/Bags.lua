@@ -32,13 +32,22 @@ local function swapHover(Kit, button)
     Kit.HoverWash(button)
 end
 
+-- Each slot takes Daylight UI's own bag slot look (DaylightUI_Bags' Items.lua,
+-- DUI.BagsSlotLook: ring by quality, empty well, its hover and pressed shading),
+-- repainted on every pass so it follows what's in the slot. Without the bag
+-- module, the Kit's item look and hover wash instead.
 local function dressItems(Kit, bagFrame)
     if type(bagFrame.EnumerateValidItems) ~= "function" then return end
+    local slotLook = type(DUI.BagsSlotLook) == "function" and DUI.BagsSlotLook or nil
     for _, itemButton in bagFrame:EnumerateValidItems() do
-        Kit.Item(itemButton)
-        if itemButton.GetPushedTexture then Kit.Hide(itemButton:GetPushedTexture()) end
+        if slotLook then
+            slotLook(itemButton)
+        else
+            Kit.Item(itemButton)
+            if itemButton.GetPushedTexture then Kit.Hide(itemButton:GetPushedTexture()) end
+            swapHover(Kit, itemButton)
+        end
         Kit.Hide(itemButton.EmptyBagIcon)
-        swapHover(Kit, itemButton)
     end
 end
 
