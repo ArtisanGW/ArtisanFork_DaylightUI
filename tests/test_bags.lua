@@ -8440,6 +8440,47 @@ T.test("bags, 'the game's bag': flipped in the options, the game's bag moves at 
     T.eq(#stub.errors, 0, tostring(stub.errors[1]))
 end)
 
+T.test("bags, /dui bagcheck: runs on its own, puts the settings back, saves its results and asks to reload", function()
+    local ns = login()
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    local manager = {}
+    function manager:FrameShown() end
+    function manager:FrameHidden() end
+    _G.GamepadMode = { FrameControlsManager = manager }
+    _G.DaylightUIBagCheckDB = nil
+    local shots = 0
+    _G.Screenshot = function() shots = shots + 1 end
+    DaylightUI.RunCommand("bagcheck")
+    T.truthy(ns.GameBagCheck.Running(), "it starts")
+    for _ = 1, 5 do stub.RunTimers() end
+    T.falsy(ns.GameBagCheck.Running(), "and ends by itself")
+    local saved = DaylightUIBagCheckDB and DaylightUIBagCheckDB.last
+    T.truthy(saved, "its results saved for after the reload")
+    local passed = {}
+    for _, result in ipairs(saved.results) do passed[result.name] = result.passed end
+    for _, name in ipairs({ "Controller: the game's bag is right under it", "off: the game's bag is parked",
+        "on: the game's bag is under UIParent", "Daylight's bag stayed shut", "off again: Daylight's bag opens",
+        "Replace off turns the switch off" }) do
+        T.eq(passed[name], true, name)
+    end
+    T.eq(shots, 1, "one game screenshot with the bag open")
+    T.eq(DaylightUI:Get("Bags", "enabled"), true, "Replace the game's bags back as it was")
+    T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "the switch back as it was")
+    T.eq(ContainerFrameCombinedBags:GetParent(), ns.OpenClose.hidden, "the game's bag parked again")
+    local asking = DaylightUI.Widgets.Asking()
+    T.truthy(asking and asking.key == "bagcheck" and asking.reload, "it ends with the reload box")
+    DaylightUI.Widgets.Answer(false)
+    _G.GamepadMode, _G.InputUtil, _G.Screenshot = nil, nil, nil
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)
+
+T.test("bags, /dui bagcheck: without the controller UI it says so and doesn't start", function()
+    local ns = login()
+    DaylightUI.RunCommand("bagcheck")
+    T.falsy(ns.GameBagCheck.Running())
+    T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "nothing changed")
+end)
+
 T.test("bags options: 'Controller: the game's bag' sits just under Replace the game's bags", function()
     local ns = login()
     local items = ns.OPTIONS.pages[1].groups[1].items

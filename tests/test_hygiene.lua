@@ -287,6 +287,11 @@ local LOCALE_OK = {
     ['"Stacking box "'] = "/dui platedebug dump", ['"Can set the click area: "'] = "/dui platedebug dump",
     ['"Plate size: "'] = "/dui platedebug dump",
     ['"Bram 60"'] = "a sample guild member's name and level (data texts in test mode)",
+    -- /dui bagcheck: the controller game's-bag prototype's dev check, read by us.
+    ['"  failed: "'] = "/dui bagcheck", ['"The bag check is already running."'] = "/dui bagcheck",
+    ['"The bag check runs out of combat."'] = "/dui bagcheck",
+    ['"Turn on the controller UI first: the bag check is for the controller."'] = "/dui bagcheck",
+    ['"The bag check needs Replace the game\'s bags on and the game\'s combined bag."'] = "/dui bagcheck",
 }
 
 T.test("hygiene: our own text goes through L (core, Character, and modules done)", function()

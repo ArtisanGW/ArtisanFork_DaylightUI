@@ -7,7 +7,7 @@ DaylightUI:RegisterModule("Bags", {
     -- turns itself off with one line in chat (tests/test_guards.lua checks this list).
     ns = ns,
     parts = { "Items", "Plugins", "Search", "Junk", "Repair", "Bags", "Layout", "Stack", "Keep", "Swap", "Window", "Move", "Disenchant", "Guard", "Prep",
-               "Slots", "Bank", "Saved", "Viewer", "Currency", "MoneyRoll", "Categories", "OpenClose" },
+               "Slots", "Bank", "Saved", "Viewer", "Currency", "MoneyRoll", "Categories", "OpenClose", "GameBagCheck" },
     label = "Bags",
     order = 125,
     defaults = ns.DEFAULTS,
