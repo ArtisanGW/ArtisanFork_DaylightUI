@@ -8415,3 +8415,34 @@ T.test("bags on a controller, 'the game's bag' on: the game's bag is back under 
     ns.module.db.padGameBag = false
     T.eq(#stub.errors, 0, tostring(stub.errors[1]))
 end)
+
+T.test("bags, 'the game's bag': flipped in the options, the game's bag moves at once; Replace the game's bags off turns it off", function()
+    local ns = login()
+    local gameBag = _G.ContainerFrameCombinedBags
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    local manager = {}
+    function manager:FrameShown() end
+    function manager:FrameHidden() end
+    _G.GamepadMode = { FrameControlsManager = manager }
+    T.eq(gameBag:GetParent(), ns.OpenClose.hidden, "parked while the switch is off")
+    DaylightUI:Set("Bags", "padGameBag", true)
+    stub.RunTimers()
+    T.eq(gameBag:GetParent(), UIParent, "switched on: the game's bag is the game's again, no reload")
+    DaylightUI:Set("Bags", "padGameBag", false)
+    stub.RunTimers()
+    T.eq(gameBag:GetParent(), ns.OpenClose.hidden, "switched off: parked again")
+    DaylightUI:Set("Bags", "padGameBag", true)
+    DaylightUI:Set("Bags", "enabled", false)
+    T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "it needs this bag, so it goes off with it")
+    DaylightUI:Set("Bags", "enabled", true)
+    T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "and stays off when this bag comes back")
+    _G.GamepadMode, _G.InputUtil = nil, nil
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)
+
+T.test("bags options: 'Controller: the game's bag' sits just under Replace the game's bags", function()
+    local ns = login()
+    local items = ns.OPTIONS.pages[1].groups[1].items
+    T.eq(items[1].key, "enabled")
+    T.eq(items[2].key, "padGameBag")
+end)

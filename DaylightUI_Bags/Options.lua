@@ -284,6 +284,8 @@ ns.OPTIONS = { pages = {
         { label = "Bag", items = {
             { type = "toggle", key = "enabled", label = "Replace the game's bags", reload = true,
               desc = "When off, the game's own bag windows are used." },
+            { type = "toggle", key = "padGameBag", label = "Controller: the game's bag", disabled = off,
+              desc = "With the controller UI on, the game's own bag opens instead of this one, in the Daylight look. It's the game's code end to end, so the D-pad works in a fight, items are used the game's way and its grid, search and menu are there. Its items are listed bag by bag, not by category. It needs Replace the game's bags, and turns off with it. A prototype." },
             { type = "toggle", key = "moneyRoll", label = "Count gold changes",
               disabled = function(get) return off(get) or motionOff() end,
               desc = "The gold at the bottom of the bag counts up or down to its new amount. Needs Motion effects (General > Appearance)." },
@@ -325,8 +327,6 @@ ns.OPTIONS = { pages = {
               desc = "Profession bag slots follow your other bags' slots. When off, they get their own section below a thin line." },
             { type = "toggle", key = "showKeyring", label = "Show keyring", disabled = off,
               desc = "Your keyring's slots, in their own section at the end of the bag. When off, keys stay on the keyring, out of sight. The key on the bag slots bar does the same." },
-            { type = "toggle", key = "padGameBag", label = "Controller: the game's bag", disabled = off,
-              desc = "With the controller UI on, the game's own bag opens instead of this one, in the Daylight look. It's the game's code end to end, so the D-pad works in a fight, items are used the game's way and its grid, search and menu are there. Its items are listed bag by bag, not by category. A prototype." },
             { type = "toggle", key = "compareItems", label = "Compare with what you wear", disabled = off,
               desc = "An item's tooltip in your bags and bank shows the gear you have on beside it. When off, only while you hold Shift." },
             { type = "dropdown", key = "emptySlots", label = "Empty slots", disabled = off,

@@ -25,6 +25,19 @@ function OC.GameBagMode()
 end
 DUI.BagsUseGameBag = function() return OC.GameBagMode() end
 
+-- The switch lives on this bag: with "Replace the game's bags" off it would do
+-- nothing, so it goes off too. Flipped while playing, the game's bag windows
+-- move at once (once this bag has taken them, OC.Take).
+local taken = false
+DUI.On("SettingChanged", function(scope, path, value)
+    if scope ~= "Bags" then return end
+    if path == "enabled" and value ~= true and DUI:Get("Bags", "padGameBag") == true then
+        DUI:Set("Bags", "padGameBag", false)
+    elseif path == "padGameBag" and taken then
+        OC.ApplyMode()
+    end
+end)
+
 OC.FUNCTIONS = { "OpenAllBags", "CloseAllBags", "ToggleAllBags", "OpenBackpack", "CloseBackpack",
                  "ToggleBackpack", "OpenBag", "CloseBag", "ToggleBag" }
 
@@ -209,7 +222,6 @@ function OC.ApplyMode()
     end, "bags:mode")
 end
 
-local taken = false
 function OC.Take()
     if taken then return end
     taken = true
