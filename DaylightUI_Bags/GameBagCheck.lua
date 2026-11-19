@@ -134,6 +134,59 @@ local function checkItems(bagFrame)
     end
 end
 
+-- Where each bag's section sits in the game's combined bag, to place category
+-- labels (bag check 8 onward): its button in the grid, its slots' area relative
+-- to the bag's top left, folded or not, and the category the game assigns it.
+local function round(value) return value and math.floor(value + 0.5) or nil end
+local function relativeBox(region, bagFrame)
+    if not (region and region.GetLeft and region:GetLeft()) then return nil end
+    local originLeft, originTop = bagFrame:GetLeft(), bagFrame:GetTop()
+    return { left = round(region:GetLeft() - originLeft), top = round(originTop - region:GetTop()),
+        width = round(region:GetWidth()), height = round(region:GetHeight()) }
+end
+
+local function recordLayout(bagFrame)
+    local sections = {}
+    local _, list = itemButtonsOf(bagFrame)
+    for _, itemButton in ipairs(list) do
+        local bag = itemButton.GetBagID and itemButton:GetBagID()
+        if bag then
+            local section = sections[bag]
+            if not section then
+                section = { bag = bag, slots = 0 }
+                sections[bag] = section
+            end
+            section.slots = section.slots + 1
+            local box = relativeBox(itemButton, bagFrame)
+            if box and itemButton:IsShown() then
+                section.minLeft = math.min(section.minLeft or box.left, box.left)
+                section.maxRight = math.max(section.maxRight or 0, box.left + box.width)
+                section.minTop = math.min(section.minTop or box.top, box.top)
+                section.maxBottom = math.max(section.maxBottom or 0, box.top + box.height)
+            end
+        end
+    end
+    local bagBar = _G.GamepadBagBar
+    local layout = {}
+    for bag, section in pairs(sections) do
+        local bagButton = bagBar and bagBar.GetBagButton and bagBar:GetBagButton(bag)
+        if bagButton then
+            section.button = regionName(bagButton)
+            section.buttonShown = bagButton:IsVisible() == true
+            section.buttonBox = relativeBox(bagButton, bagFrame)
+            section.collapsed = bagButton.isCollapsed == true
+        end
+        local manager = _G.ContainerFrameSettingsManager
+        if manager and manager.GenerateFilterList then
+            local ok, filters = pcall(manager.GenerateFilterList, manager, bag)
+            section.category = ok and filters or nil
+        end
+        layout[#layout + 1] = section
+    end
+    table.sort(layout, function(first, second) return first.bag < second.bag end)
+    running.layout = { bagBox = relativeBox(bagFrame, bagFrame), sections = layout }
+end
+
 local function checkLook(bagFrame)
     local Kit = DUI.Skins and DUI.Skins.Kit and DUI.Skins.Kit()
     record("the skins module is there", Kit ~= nil)
@@ -193,6 +246,8 @@ local function buildSteps()
             record("the game's bag opened", bagFrame:IsShown(), running.openState)
             record("Daylight's bag stayed shut", not (ns.window and ns.window:IsShown()))
             checkLook(bagFrame)
+            local ok, err = pcall(recordLayout, bagFrame)
+            if not ok then record("the bag's layout was recorded", false, tostring(err)) end
             C_Timer.After(OPEN_SECONDS / 2, function()
                 if running and type(Screenshot) == "function" then
                     Screenshot()
@@ -262,7 +317,7 @@ local function finish(reason)
     local saved = {
         time = date("%Y-%m-%d %H:%M:%S"), stopped = reason, results = run.results, failed = failed,
         leftovers = run.leftovers or {}, itemLeftovers = run.itemLeftovers or {},
-        blocked = run.blocked, screenshot = run.screenshot,
+        blocked = run.blocked, screenshot = run.screenshot, layout = run.layout,
         restored = { enabled = DUI:Get("Bags", "enabled"), padGameBag = DUI:Get("Bags", "padGameBag") },
     }
     DaylightUIBagCheckDB = DaylightUIBagCheckDB or {}
