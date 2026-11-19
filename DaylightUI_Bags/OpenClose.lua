@@ -20,8 +20,8 @@ ns.OpenClose = OC
 -- module dresses it in the Daylight look (DaylightUI_Skins/Packs/Game/Bags.lua).
 -- This bag's window stays shut. Everything else here only applies when it's off.
 function OC.GameBagMode()
-    local mod = ns.module
-    return mod ~= nil and mod.db ~= nil and mod.db.padGameBag == true and DUI.Pad ~= nil and DUI.Pad.On() == true
+    local module = ns.module
+    return module ~= nil and module.db ~= nil and module.db.padGameBag == true and DUI.Pad ~= nil and DUI.Pad.On() == true
 end
 DUI.BagsUseGameBag = function() return OC.GameBagMode() end
 
@@ -102,8 +102,8 @@ end
 local pending = false
 function OC.Follow()
     if OC.GameBagMode() then
-        local w = ns.window
-        if w and w:IsShown() then w:Hide() end
+        local window = ns.window
+        if window and window:IsShown() then window:Hide() end
         return
     end
     -- The game closed its bags (walking away from a merchant): tell it now, inside
@@ -194,17 +194,17 @@ end
 local parkedNow = nil
 function OC.ApplyMode()
     DUI.AfterCombat(function()
-        local park = not OC.GameBagMode()
-        if parkedNow == park then return end
-        parkedNow = park
-        for _, f in ipairs(OC.GameWindows()) do f:SetParent(park and OC.hidden or UIParent) end
-        if park then
+        local parkGameBags = not OC.GameBagMode()
+        if parkedNow == parkGameBags then return end
+        parkedNow = parkGameBags
+        for _, gameWindow in ipairs(OC.GameWindows()) do gameWindow:SetParent(parkGameBags and OC.hidden or UIParent) end
+        if parkGameBags then
             OC.Follow()
         else
-            local w = ns.window
-            if w and w:IsShown() then w:Hide() end
-            local combined = _G.ContainerFrameCombinedBags
-            if combined then DUI.Fire("GameWindowBack", "bags", "bags", combined) end   -- the skins module dresses it
+            local window = ns.window
+            if window and window:IsShown() then window:Hide() end
+            local combinedBag = _G.ContainerFrameCombinedBags
+            if combinedBag then DUI.Fire("GameWindowBack", "bags", "bags", combinedBag) end   -- the skins module dresses it
         end
     end, "bags:mode")
 end

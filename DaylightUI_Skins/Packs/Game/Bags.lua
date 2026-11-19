@@ -17,16 +17,18 @@ local function covered()
 end
 
 -- Each item button the bag holds now: the game's own list of them.
-local function dressItems(Kit, f)
-    if type(f.EnumerateValidItems) ~= "function" then return end
-    for _, button in f:EnumerateValidItems() do Kit.Item(button) end
+local function dressItems(Kit, bagFrame)
+    if type(bagFrame.EnumerateValidItems) ~= "function" then return end
+    for _, itemButton in bagFrame:EnumerateValidItems() do Kit.Item(itemButton) end
 end
 
-local reg = Engine.Window({ key = "game:bags", pack = "system", frame = "ContainerFrameCombinedBags", watch = true,
+local registration = Engine.Window({ key = "game:bags", pack = "system", frame = "ContainerFrameCombinedBags", watch = true,
     skip = covered,
-    after = function(Kit, f) dressItems(Kit, f) end })
+    after = function(Kit, bagFrame) dressItems(Kit, bagFrame) end })
 
 DUI.RegisterEvent("BAG_UPDATE_DELAYED", function()
-    local f = _G.ContainerFrameCombinedBags
-    if type(f) == "table" and f.IsShown and f:IsShown() and not covered() and reg.again then reg.again() end
+    local bagFrame = _G.ContainerFrameCombinedBags
+    if type(bagFrame) == "table" and bagFrame.IsShown and bagFrame:IsShown() and not covered() and registration.again then
+        registration.again()
+    end
 end)
