@@ -16,10 +16,19 @@ local function covered()
     return not (type(DUI.BagsUseGameBag) == "function" and DUI.BagsUseGameBag())
 end
 
--- Each item button the bag holds now: the game's own list of them.
+-- Each item button the bag holds now: the game's own list of them. On a
+-- controller the game gives each one its own slot art (ContainerFrame.lua,
+-- ContainerFrameItemButtonMixin:OnLoad: ItemSlotFrame_* atlases) and, in an
+-- empty slot, a gray picture of the bag (SetAppearanceToEmptyBagSlot); faded
+-- here on every pass, as the game re-shows them. Its focus highlight stays:
+-- that's the D-pad's cursor.
 local function dressItems(Kit, bagFrame)
     if type(bagFrame.EnumerateValidItems) ~= "function" then return end
-    for _, itemButton in bagFrame:EnumerateValidItems() do Kit.Item(itemButton) end
+    for _, itemButton in bagFrame:EnumerateValidItems() do
+        Kit.Item(itemButton)
+        if itemButton.GetPushedTexture then Kit.Hide(itemButton:GetPushedTexture()) end
+        Kit.Hide(itemButton.EmptyBagIcon)
+    end
 end
 
 local registration = Engine.Window({ key = "game:bags", pack = "system", frame = "ContainerFrameCombinedBags", watch = true,
@@ -32,3 +41,14 @@ DUI.RegisterEvent("BAG_UPDATE_DELAYED", function()
         registration.again()
     end
 end)
+
+-- The skin is skipped while Daylight UI's bag stands in for the game's, and
+-- tried again when the bag is handed back (GameWindowBack). If the game's bag
+-- opens before that ever happened (the mode was already on when the skins
+-- started), it's tried when the bag shows.
+local combinedBag = _G.ContainerFrameCombinedBags
+if type(combinedBag) == "table" and combinedBag.HookScript then
+    combinedBag:HookScript("OnShow", function()
+        if not registration.done and not covered() then Engine.Try(registration) end
+    end)
+end

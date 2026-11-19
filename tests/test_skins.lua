@@ -4714,6 +4714,29 @@ T.test("skins: the game's bag, left to the game on a controller, wears the windo
     DaylightUI.BagsUseGameBag = nil
 end)
 
+T.test("skins: the game's bag, already left to the game when the skins start, is dressed when it opens", function()
+    -- At login the skin is tried while the bags still cover it, and no hand-back
+    -- (GameWindowBack) follows: opening the bag is what dresses it.
+    DaylightUI.BagsUseGameBag = function() return false end
+    login(function() gameBag() end)
+    local Kit = stub.skins.Kit
+    local bagFrame = ContainerFrameCombinedBags
+    T.falsy(Kit.ShellOf(bagFrame), "skipped while covered")
+    DaylightUI.BagsUseGameBag = function() return true end
+    local itemButton = bagFrame.items[1]
+    local pushed = itemButton:CreateTexture()
+    function itemButton:GetPushedTexture() return pushed end
+    itemButton.EmptyBagIcon = itemButton:CreateTexture()
+    bagFrame:Show()
+    stub.RunTimers()
+    T.truthy(Kit.ShellOf(bagFrame), "the bag wears our window look once it opens")
+    T.truthy(Kit.ShellOf(itemButton), "its items the item look")
+    T.eq(pushed:GetAlpha(), 0, "the controller's pressed slot art gone")
+    T.eq(itemButton.EmptyBagIcon:GetAlpha(), 0, "the gray bag picture in an empty slot gone")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag = nil
+end)
+
 T.test("skins: the game's bag isn't dressed while Daylight UI's bag stands in for it", function()
     login(function() gameBag() end)
     DaylightUI.BagsUseGameBag = function() return false end
