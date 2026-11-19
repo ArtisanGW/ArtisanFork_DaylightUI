@@ -109,7 +109,9 @@ local function checkItems(bagFrame)
     for _, itemButton in ipairs(list) do
         local slotLook, kitLook = ns.Items.Parts(itemButton), Kit and Kit.ShellOf(itemButton)
         if not (slotLook or kitLook) then undressed = undressed + 1 end
-        if slotLook and kitLook then twoLooks = twoLooks + 1 end
+        -- Kit.ShellOf also returns the slot look's own ring (a Style shell on the
+        -- button): only a different shell is the Kit's item frame on top.
+        if slotLook and kitLook and kitLook ~= slotLook.shell then twoLooks = twoLooks + 1 end
         if itemButton.GetNormalTexture and not hidden(itemButton:GetNormalTexture()) then framed = framed + 1 end
         -- The controller's pressed art is an atlas; Daylight's pressed shading is a plain color.
         local pushedTexture = itemButton.GetPushedTexture and itemButton:GetPushedTexture()
