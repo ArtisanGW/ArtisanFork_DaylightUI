@@ -4816,6 +4816,25 @@ T.test("skins: the game's bag on a controller: its footer in our panel and font,
     _G.GamepadBagBar = nil
 end)
 
+T.test("skins: the game's bag with Daylight UI's bags: its items take the bag slot look only, never the Kit's too", function()
+    login(function() gameBag() end)
+    local looked = {}
+    DaylightUI.BagsSlotLook = function(itemButton) looked[itemButton] = (looked[itemButton] or 0) + 1 end
+    local Kit = stub.skins.Kit
+    local bagFrame = ContainerFrameCombinedBags
+    DaylightUI.BagsUseGameBag = function() return true end
+    DaylightUI.Fire("GameWindowBack", "bags", "bags", bagFrame)
+    stub.RunTimers()
+    bagFrame:Show()
+    stub.RunTimers()
+    for i, itemButton in ipairs(bagFrame.items) do
+        T.truthy(looked[itemButton], "item " .. i .. " in the bag slot look")
+        T.falsy(Kit.ShellOf(itemButton), "item " .. i .. " without the Kit's item frame on top")
+    end
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag, DaylightUI.BagsSlotLook = nil, nil
+end)
+
 T.test("skins: the game's bag isn't dressed while Daylight UI's bag stands in for it", function()
     login(function() gameBag() end)
     DaylightUI.BagsUseGameBag = function() return false end

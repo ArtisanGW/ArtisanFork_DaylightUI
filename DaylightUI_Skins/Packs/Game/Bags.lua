@@ -12,6 +12,9 @@ local _, ns = ...
 local DUI = DaylightUI
 local Engine = ns.Engine
 
+-- Daylight UI's bag module is there to lend its slot look (DUI.BagsSlotLook).
+local function usesSlotLook() return type(DUI.BagsSlotLook) == "function" end
+
 local function covered()
     return not (type(DUI.BagsUseGameBag) == "function" and DUI.BagsUseGameBag())
 end
@@ -38,7 +41,7 @@ end
 -- module, the Kit's item look and hover wash instead.
 local function dressItems(Kit, bagFrame)
     if type(bagFrame.EnumerateValidItems) ~= "function" then return end
-    local slotLook = type(DUI.BagsSlotLook) == "function" and DUI.BagsSlotLook or nil
+    local slotLook = usesSlotLook() and DUI.BagsSlotLook or nil
     for _, itemButton in bagFrame:EnumerateValidItems() do
         if slotLook then
             slotLook(itemButton)
@@ -131,6 +134,12 @@ local function dressBagButtons(Kit)
     if bagBar.GetChildren then
         for _, child in ipairs({ bagBar:GetChildren() }) do dressBagButton(Kit, child) end
     end
+end
+
+-- The window walk would give each item button the Kit's item look before
+-- dressItems runs (and it's never undone): left to Daylight UI's slot look instead.
+if type(_G.ContainerFrameCombinedBags) == "table" then
+    ns.Kit.LeaveItemsOf(_G.ContainerFrameCombinedBags, usesSlotLook)
 end
 
 local registration = Engine.Window({ key = "game:bags", pack = "system", frame = "ContainerFrameCombinedBags", watch = true,

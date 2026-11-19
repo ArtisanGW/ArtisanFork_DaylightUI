@@ -1853,8 +1853,19 @@ end
 -- An item button (merchant goods, mail attachments, bag slots): icon cropped on
 -- a black square, slot art removed (including a bag slot's background, which
 -- the game re-shows), quality outline.
+-- Frames whose item buttons wear a look of their own (the game's bag in Daylight
+-- UI's bag slot look): Kit.Item leaves those buttons alone while rule(btn) says so.
+local itemsLeftTo = setmetatable({}, { __mode = "k" }) -- frame -> rule(btn)
+function Kit.LeaveItemsOf(frame, rule)
+    if isTable(frame) and type(rule) == "function" then itemsLeftTo[frame] = rule end
+end
+
 function Kit.Item(btn)
-    if not isTable(btn) or not btn.CreateTexture or slots[btn] or not once("item", btn) then return end
+    if not isTable(btn) or not btn.CreateTexture or slots[btn] then return end
+    local parent = btn.GetParent and btn:GetParent()
+    local rule = parent and itemsLeftTo[parent]
+    if rule and rule(btn) then return end
+    if not once("item", btn) then return end
     local icon = iconOf(btn)
     if btn.GetNormalTexture then Kit.Hide(btn:GetNormalTexture()) end
     if kind(btn.ItemSlotBackground) == "Texture" then Kit.Erase(btn.ItemSlotBackground) end
