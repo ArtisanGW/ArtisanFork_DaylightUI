@@ -58,6 +58,9 @@ local function describeLeftover(region)
         -- Files loaded at run time (Daylight UI's media) have negative ids; 130871
         -- is the plain white texture behind Daylight UI's color fills.
         if isOurs(texture) or (type(texture) == "number" and texture < 0) or texture == WHITE_TEXTURE then return nil end
+        -- Content, not art: the controller's button pictures and the bags' own icons.
+        if atlas and atlas:find("^Gamepad%-") then return nil end
+        if regionName(region):find("IconTexture$") then return nil end
         if atlas then return "atlas " .. atlas end
         if texture ~= nil and texture ~= 0 then return "texture " .. tostring(texture) end
     elseif objectType == "FontString" then

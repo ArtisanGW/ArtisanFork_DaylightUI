@@ -4776,6 +4776,46 @@ T.test("skins: the game's bag on a controller: its count after the title, the mo
     _G.GamepadBackpackButton, _G.GamepadBackpackButtonCount, _G.ContainerFrameCombinedBagsGoldButtonText = nil, nil, nil
 end)
 
+T.test("skins: the game's bag on a controller: its footer in our panel and font, the button pictures kept", function()
+    local container, prompt, glyph, reagentButton
+    login(function()
+        local bagFrame = gameBag()
+        local legend = CreateFrame("Frame", nil, bagFrame)
+        container = CreateFrame("Frame", nil, legend)
+        container.backgroundSlot = container:CreateTexture()
+        container.backgroundBorder = container:CreateTexture()
+        legend.promptContainerFrame = container
+        prompt = CreateFrame("Frame", nil, container)
+        prompt.ControlDescText = CreateFrame("Frame", nil, prompt)
+        prompt.ControlDescText.FontString = prompt.ControlDescText:CreateFontString()
+        prompt.ControlDescText.FontString:SetText("Collapse")
+        glyph = prompt:CreateTexture()
+        prompt.InputIcon1 = glyph
+        bagFrame.gamepadFooter = { inputLegend = legend }
+        local bagBar = CreateFrame("Frame", "GamepadBagBar", bagFrame)
+        reagentButton = CreateFrame("Button", nil, bagBar)
+        reagentButton.SlotHighlightTexture = reagentButton:CreateTexture()
+    end)
+    local bagFrame = ContainerFrameCombinedBags
+    local Kit = stub.skins.Kit
+    DaylightUI.BagsUseGameBag = function() return true end
+    DaylightUI.Fire("GameWindowBack", "bags", "bags", bagFrame)
+    stub.RunTimers()
+    bagFrame:Show()
+    stub.RunTimers()
+    T.truthy(Kit.Erased(container.backgroundSlot), "the game's footer slot art masked off")
+    T.truthy(Kit.Erased(container.backgroundBorder), "and its border")
+    container.backgroundSlot:SetAlpha(1)   -- as the game's restyle does
+    T.truthy(Kit.Erased(container.backgroundSlot), "still gone after the game sets its alpha back")
+    T.truthy(Kit.ShellOf(container), "the prompt row wears our panel")
+    T.eq(prompt.ControlDescText.FontString.__font[1], DaylightUI.Style.FONT, "the labels in our font")
+    T.eq(glyph:GetAlpha(), 1, "the button picture kept")
+    T.eq(reagentButton.SlotHighlightTexture:GetAlpha(), 0, "the reagent bag's action-bar frame gone")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag = nil
+    _G.GamepadBagBar = nil
+end)
+
 T.test("skins: the game's bag isn't dressed while Daylight UI's bag stands in for it", function()
     login(function() gameBag() end)
     DaylightUI.BagsUseGameBag = function() return false end

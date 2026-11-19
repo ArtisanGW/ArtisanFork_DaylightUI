@@ -3,8 +3,7 @@
 -- bag", a prototype). Never walked while Daylight UI's bag stands in for it.
 --
 -- The bag stays the game's: its item buttons, their clicks, the D-pad grid and
--- the footer are its own secure code. The footer's controller prompts are left
--- in the game's look for now. Only art is hidden (by alpha) and dressed,
+-- the footer are its own secure code. Only art is hidden (by alpha) and dressed,
 -- like every skin here. The game hands its item buttons out of a pool each time
 -- the bag opens or changes size, so they're dressed on every pass, and again
 -- when the bag's contents settle (BAG_UPDATE_DELAYED) while it's open.
@@ -85,7 +84,34 @@ local function dressBagButton(Kit, button)
     local name = button.GetName and button:GetName()
     local count = button.Count or (name and _G[name .. "Count"])
     if count then Kit.Font(count) end
+    Kit.Hide(button.SlotHighlightTexture)   -- the reagent bag's action-bar frame
     swapHover(Kit, button)
+end
+
+-- The controller's footer (A Select, X Collapse, Y Manage Bag, B Close): the
+-- game's shared prompt legend (Blizzard_GamepadSharedUtility,
+-- InputLegendPromptGroup.lua). Its slot and border art are masked off, since the
+-- game sets their alpha back on each restyle; the row gets the window's panel
+-- and its labels Daylight's font. The button pictures stay: they say what to press.
+local function eraseLegendBackground(Kit, frame)
+    if type(frame) ~= "table" then return end
+    Kit.Erase(frame.backgroundSlot)
+    Kit.Erase(frame.backgroundBorder)
+end
+
+local function dressFooter(Kit, bagFrame)
+    local footer = bagFrame.gamepadFooter
+    local legend = type(footer) == "table" and footer.inputLegend
+    local container = type(legend) == "table" and legend.promptContainerFrame
+    if type(container) ~= "table" or not container.GetChildren then return end
+    eraseLegendBackground(Kit, container)
+    Kit.Panel(container)
+    for _, prompt in ipairs({ container:GetChildren() }) do
+        eraseLegendBackground(Kit, prompt)   -- the LB+ modifier section has its own
+        local description = prompt.ControlDescText
+        local text = type(description) == "table" and (description.FontString or description)
+        if text then Kit.Font(text) end
+    end
 end
 
 local function dressBagButtons(Kit)
@@ -105,6 +131,7 @@ local registration = Engine.Window({ key = "game:bags", pack = "system", frame =
         dressCount(Kit, bagFrame)
         dressMoney(Kit, bagFrame)
         dressBagButtons(Kit)
+        dressFooter(Kit, bagFrame)
     end })
 
 DUI.RegisterEvent("BAG_UPDATE_DELAYED", function()
