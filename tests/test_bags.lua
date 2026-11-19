@@ -8386,3 +8386,32 @@ T.test("bags: in a fight, Win.Held reads the bag's table of held slots without c
     stub.LeaveCombat()
 end)
 
+
+T.test("bags on a controller, 'the game's bag' on: the game's bag is back under UIParent and opens in place of this one; off again, it's parked", function()
+    local ns = login()
+    local f = ns.window
+    local game = _G.ContainerFrameCombinedBags
+    T.truthy(game, "the fake game has the combined bag")
+    T.eq(game:GetParent(), ns.OpenClose.hidden, "parked while this bag stands in for it")
+    ns.module.db.padGameBag = true
+    T.falsy(ns.OpenClose.GameBagMode(), "the switch alone, with no controller: still this bag")
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    local m = {}
+    function m:FrameShown() end
+    function m:FrameHidden() end
+    _G.GamepadMode = { FrameControlsManager = m }
+    stub.FireEvent("INPUT_DEVICE_INTERFACE_TRANSITION")
+    stub.RunTimers()
+    T.truthy(ns.OpenClose.GameBagMode())
+    T.truthy(DaylightUI.BagsUseGameBag(), "the skins module is told")
+    T.eq(game:GetParent(), UIParent, "the game's bag is the game's again")
+    OpenAllBags()
+    stub.RunTimers()
+    T.falsy(f:IsShown(), "this bag stays shut")
+    _G.GamepadMode, _G.InputUtil = nil, nil
+    stub.FireEvent("INPUT_DEVICE_INTERFACE_TRANSITION")
+    stub.RunTimers()
+    T.eq(game:GetParent(), ns.OpenClose.hidden, "controller off: parked again, this bag back")
+    ns.module.db.padGameBag = false
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)

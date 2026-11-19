@@ -4667,3 +4667,60 @@ T.test("skins: the hunter's stable (PetStableFrame) wears our window look, its p
     barDrag:GetScript("OnDragStop")(barDrag)
     T.truthy(stub.skins.WindowMove.Spot("PetStableFrame"), "its spot saved")
 end)
+
+-- The game's combined bag (ContainerFrameCombinedBags), as DaylightUI_Bags'
+-- "Controller: the game's bag" prototype leaves it: two item buttons from its pool.
+local function gameBag()
+    local f = window("ContainerFrameCombinedBags")
+    f.items = {}
+    for i = 1, 2 do
+        local b = CreateFrame("Button", "ContainerFrameCombinedBagsItem" .. i, f)
+        b:SetSize(37, 37)
+        b.icon = b:CreateTexture()
+        b.IconBorder = b:CreateTexture()
+        f.items[i] = b
+    end
+    function f:EnumerateValidItems()
+        local i = 0
+        return function() i = i + 1; if f.items[i] then return i, f.items[i] end end
+    end
+    f:Hide()
+    return f
+end
+
+T.test("skins: the game's bag, left to the game on a controller, wears the window and item looks; covered, it's left alone", function()
+    login(function() gameBag() end)
+    local Kit = stub.skins.Kit
+    local f = ContainerFrameCombinedBags
+    DaylightUI.BagsUseGameBag = function() return true end
+    DaylightUI.Fire("GameWindowBack", "bags", "bags", f)   -- as DaylightUI_Bags does when it hands the bag back
+    stub.RunTimers()
+    f:Show()
+    stub.RunTimers()
+    T.truthy(Kit.ShellOf(f), "the bag wears our window look")
+    T.eq(f.NineSlice:GetAlpha(), 0, "the game's frame art gone")
+    for i, b in ipairs(f.items) do
+        T.truthy(Kit.ShellOf(b), "item " .. i .. " wears the item look")
+        T.eq(b.IconBorder:GetAlpha(), 0, "its own border gone, our outline instead")
+    end
+    -- The pool hands out a new button (the bag grew): dressed on the next pass.
+    local extra = CreateFrame("Button", "ContainerFrameCombinedBagsItem3", f)
+    extra.icon, extra.IconBorder = extra:CreateTexture(), extra:CreateTexture()
+    f.items[3] = extra
+    stub.FireEvent("BAG_UPDATE_DELAYED")
+    stub.RunTimers()
+    T.truthy(Kit.ShellOf(extra), "a button handed out later is dressed when the bag settles")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag = nil
+end)
+
+T.test("skins: the game's bag isn't dressed while Daylight UI's bag stands in for it", function()
+    login(function() gameBag() end)
+    DaylightUI.BagsUseGameBag = function() return false end
+    local f = ContainerFrameCombinedBags
+    f:Show()
+    stub.RunTimers()
+    T.falsy(stub.skins.Kit.ShellOf(f.items[1]), "its items untouched")
+    T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+    DaylightUI.BagsUseGameBag = nil
+end)

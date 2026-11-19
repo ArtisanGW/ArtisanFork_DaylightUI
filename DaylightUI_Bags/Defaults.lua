@@ -4,6 +4,7 @@ local _, ns = ...
 
 ns.DEFAULTS = {
     enabled = true,         -- replace the default bags (needs a reload)
+    padGameBag = false,     -- on a controller: the game's own bag, in the Daylight look (prototype, opt-in; OpenClose.lua)
     columns = 10,           -- slots per row
     iconSize = 35,          -- px
     spacing = 2,            -- px between slots

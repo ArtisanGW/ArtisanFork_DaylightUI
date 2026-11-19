@@ -30,6 +30,7 @@ Packs\Game\Lfg.lua
 Packs\Game\Mail.lua
 Packs\Game\Social.lua
 Packs\Game\Legacy.lua
+Packs\Game\Bags.lua
 Packs\Addons\Ace3.lua
 Packs\Addons\Questie.lua
 Packs\Addons\RXPGuides.lua

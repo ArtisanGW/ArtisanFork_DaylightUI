@@ -14,6 +14,17 @@ local DUI = DaylightUI
 local OC = {}
 ns.OpenClose = OC
 
+-- Prototype: on a controller, the game's own bag instead of this one. The game's
+-- combined bag is then left under UIParent, so it opens, navigates, uses items
+-- and stays on the D-pad in a fight entirely in the game's own code; the skins
+-- module dresses it in the Daylight look (DaylightUI_Skins/Packs/Game/Bags.lua).
+-- This bag's window stays shut. Everything else here only applies when it's off.
+function OC.GameBagMode()
+    local mod = ns.module
+    return mod ~= nil and mod.db ~= nil and mod.db.padGameBag == true and DUI.Pad ~= nil and DUI.Pad.On() == true
+end
+DUI.BagsUseGameBag = function() return OC.GameBagMode() end
+
 OC.FUNCTIONS = { "OpenAllBags", "CloseAllBags", "ToggleAllBags", "OpenBackpack", "CloseBackpack",
                  "ToggleBackpack", "OpenBag", "CloseBag", "ToggleBag" }
 
@@ -90,6 +101,11 @@ end
 -- several of these functions in a row).
 local pending = false
 function OC.Follow()
+    if OC.GameBagMode() then
+        local w = ns.window
+        if w and w:IsShown() then w:Hide() end
+        return
+    end
     -- The game closed its bags (walking away from a merchant): tell it now, inside
     -- its own close, while the NPC window is still listed. A frame later the bag
     -- would be the last window listed and emptying the list gets refused.
@@ -140,6 +156,7 @@ end
 -- the auction house or bank later and refused SetPreferredGamepadInteractTarget.
 -- Returns true when the bag was opened for this (it was closed).
 function OC.Hold()
+    if OC.GameBagMode() then return false end   -- the game opens its own bag where it wants it
     if OC.held or OC.AnyOpen() or (ns.window and ns.window:IsShown()) then return false end
     OC.held = true
     OC.Follow()
@@ -172,11 +189,32 @@ local function after(name)
     end
 end
 
+-- Where the game's bag windows live: under the hidden frame while this bag stands
+-- in for them, under UIParent in the game's-bag mode. Moved out of combat only.
+local parkedNow = nil
+function OC.ApplyMode()
+    DUI.AfterCombat(function()
+        local park = not OC.GameBagMode()
+        if parkedNow == park then return end
+        parkedNow = park
+        for _, f in ipairs(OC.GameWindows()) do f:SetParent(park and OC.hidden or UIParent) end
+        if park then
+            OC.Follow()
+        else
+            local w = ns.window
+            if w and w:IsShown() then w:Hide() end
+            local combined = _G.ContainerFrameCombinedBags
+            if combined then DUI.Fire("GameWindowBack", "bags", "bags", combined) end   -- the skins module dresses it
+        end
+    end, "bags:mode")
+end
+
 local taken = false
 function OC.Take()
     if taken then return end
     taken = true
-    for _, f in ipairs(OC.GameWindows()) do f:SetParent(OC.hidden) end
+    OC.ApplyMode()
+    DUI.On("PadChanged", OC.ApplyMode)
     for _, name in ipairs(OC.FUNCTIONS) do
         if type(_G[name]) == "function" then hooksecurefunc(name, after(name)) end
     end
@@ -208,6 +246,7 @@ function OC.Take()
     if f then
         f:HookScript("OnHide", function()
             OC.held = nil
+            if OC.GameBagMode() then return end   -- the game's bag is the open one: leave it
             if OC.AnyOpen() then OC.CloseGame() end
         end)
     end
