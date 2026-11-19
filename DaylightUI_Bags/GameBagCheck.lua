@@ -171,10 +171,16 @@ local function buildSteps()
             record("on: the game's bag mode is on", OC.GameBagMode() == true)
             record("on: the skins module is told", DUI.BagsUseGameBag() == true)
             record("on: the game's bag is under UIParent", bagFrame:GetParent() == UIParent)
+            -- The game's OpenAllBags does nothing while it counts any bag as open
+            -- (ContainerFrame.lua, OpenAllBags): close first, and keep what it saw.
+            closeGameBag()
+            local allowed = type(ContainerFrame_AllowedToOpenBags) ~= "function" or ContainerFrame_AllowedToOpenBags()
+            local anyOpen = type(IsAnyBagOpen) == "function" and IsAnyBagOpen()
+            running.openState = string.format("before opening: any bag open %s, allowed to open %s", tostring(anyOpen), tostring(allowed))
             OpenAllBags()
         end },
         { label = "the bag open", seconds = OPEN_SECONDS, run = function()
-            record("the game's bag opened", bagFrame:IsShown())
+            record("the game's bag opened", bagFrame:IsShown(), running.openState)
             record("Daylight's bag stayed shut", not (ns.window and ns.window:IsShown()))
             checkLook(bagFrame)
             C_Timer.After(OPEN_SECONDS / 2, function()
