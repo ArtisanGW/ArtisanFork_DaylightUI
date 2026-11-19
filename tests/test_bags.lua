@@ -8464,6 +8464,8 @@ T.test("bags, /dui bagcheck: runs on its own, puts the settings back, saves its 
         T.eq(passed[name], true, name)
     end
     T.eq(shots, 1, "one game screenshot with the bag open")
+    stub.FireEvent("ADDON_ACTION_FORBIDDEN", "DaylightUI_Bags", "SetPreferredGamepadInteractTarget()")
+    T.eq(#saved.blocked, 0, "a refusal after the run isn't the run's")
     T.eq(DaylightUI:Get("Bags", "enabled"), true, "Replace the game's bags back as it was")
     T.eq(DaylightUI:Get("Bags", "padGameBag"), false, "the switch back as it was")
     T.eq(ContainerFrameCombinedBags:GetParent(), ns.OpenClose.hidden, "the game's bag parked again")
@@ -8472,6 +8474,25 @@ T.test("bags, /dui bagcheck: runs on its own, puts the settings back, saves its 
     DaylightUI.Widgets.Answer(false)
     _G.GamepadMode, _G.InputUtil, _G.Screenshot = nil, nil, nil
     T.eq(#stub.errors, 0, tostring(stub.errors[1]))
+end)
+
+T.test("bags, /dui bagcheck: a refusal during the run is saved with the step it came in", function()
+    local ns = login()
+    _G.InputUtil = { IsGamepadUIEnabled = function() return true end }
+    local manager = {}
+    function manager:FrameShown() end
+    function manager:FrameHidden() end
+    _G.GamepadMode = { FrameControlsManager = manager }
+    _G.DaylightUIBagCheckDB = nil
+    DaylightUI.RunCommand("bagcheck")
+    stub.FireEvent("ADDON_ACTION_FORBIDDEN", "DaylightUI_Bags", "SetPreferredGamepadInteractTarget()")
+    for _ = 1, 5 do stub.RunTimers() end
+    local blocked = DaylightUIBagCheckDB.last.blocked
+    T.eq(#blocked, 1)
+    T.eq(blocked[1].step, "the options", "tagged with the step running then")
+    T.eq(blocked[1].action, "SetPreferredGamepadInteractTarget()")
+    DaylightUI.Widgets.Answer(false)
+    _G.GamepadMode, _G.InputUtil = nil, nil
 end)
 
 T.test("bags, /dui bagcheck: without the controller UI it says so and doesn't start", function()

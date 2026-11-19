@@ -222,7 +222,8 @@ end
 
 local function onBlocked(event, addon, action)
     if not running then return end
-    running.blocked[#running.blocked + 1] = { event = event, addon = tostring(addon), action = tostring(action), time = date("%H:%M:%S") }
+    running.blocked[#running.blocked + 1] = { event = event, addon = tostring(addon), action = tostring(action), time = date("%H:%M:%S"),
+        step = running.stepLabel }
 end
 DUI.RegisterEvent("ADDON_ACTION_BLOCKED", onBlocked)
 DUI.RegisterEvent("ADDON_ACTION_FORBIDDEN", onBlocked)
@@ -263,6 +264,7 @@ local function runStep(index)
     end
     local step = running.steps[index]
     if not step then return finish(nil) end
+    running.stepLabel = step.label
     showTimer(string.format("Bag check: %s (%d s left)", step.label, secondsLeft(index)))
     local ok, err = pcall(step.run)
     if not ok then record("step '" .. step.label .. "' ran", false, tostring(err)) end
